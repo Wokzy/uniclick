@@ -45,6 +45,7 @@ async def complete_essential_tasks(client:TelegramClient, class_instance):
 		print('Completed essential tasks')
 	else:
 		print(message)
+		input('Print [Y] if you are done -> ')
 
 	# return tasks
 
@@ -81,12 +82,12 @@ class SimpleTap:
 
 	def extract_auth_data(self) -> str:
 		""" Get auth data from url """
-		print(self.base_url)
+		# print(self.base_url)
 		return urllib.parse.unquote(self.base_url).split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]
 
 
 	def update_base_url(self, new_url:str):
-		self.base_url = base_url
+		self.base_url = new_url
 		self.auth_data = self.extract_auth_data()
 
 		self.session.close()
@@ -110,11 +111,21 @@ class SimpleTap:
 		""" Start farming and claim """
 
 		if user_data['activeFarmingSeconds'] >= user_data['maxFarmingSecondSec']:
+			print('Claiming farm...')
 			self.make_post_request('claim')
 			self.make_post_request('activate')
 
 		if user_data['activeFarmingSeconds'] == 0:
+			print('Staring farming...')
 			self.make_post_request('activate')
+
+
+	def _spin_wheel(self, user_data:dict) -> None:
+		""" Wheel spinning """
+		if user_data['spinCount'] > 0:
+			print('Spinning wheel')
+			self.make_post_request('claim-spin', payload={'amount':user_data['spinCount']})
+			print(f'Spinned wheel {user_data["spinCount"]}')
 
 
 	def update_all(self):
@@ -122,6 +133,7 @@ class SimpleTap:
 
 		self._tap_coins(user_data)
 		self._farm_coins(user_data)
+		self._spin_wheel(user_data)
 
 
 	def make_post_request(self, method:str, payload:dict = {}) -> dict:

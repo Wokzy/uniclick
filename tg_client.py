@@ -4,8 +4,10 @@ import asyncio
 from telethon import TelegramClient
 from telethon.sync import functions
 
+import time
 import json
 import utils
+import datetime
 
 from apps import simpletap
 
@@ -13,31 +15,43 @@ from apps import simpletap
 
 
 CONFIG = utils.load_config()
+CHANGE_URL_TIMEOUT = datetime.timedelta(seconds=10)
 
-simpletap_url = 'https://simpletap.app/#tgWebAppData=query_id%3DAAEBczBSAAAAAAFzMFJTmCOe%26user%3D%257B%2522id%2522%253A1378906881%252C%2522first_name%2522%253A%2522Yegor%2522%252C%2522last_name%2522%253A%2522Yershov%2522%252C%2522username%2522%253A%2522Wokzy1%2522%252C%2522language_code%2522%253A%2522en%2522%252C%2522allows_write_to_pm%2522%253Atrue%257D%26auth_date%3D1726633601%26hash%3De30bf69172b531a1aa2117e39cf26666dcd10315e7a1c7d048d96f5f0cf23fb5&tgWebAppVersion=7.4&tgWebAppPlatform=ios'
 
-def test():
-
-	app = simpletap.SimpleTap(simpletap_url, 1378906881)
-	app.update_all()
-	print(json.dumps(simpletap.get_essnsial_tasks(app), indent=4))
+async def get_simpletap_url(client):
+	return await utils.get_base_app_url(client, simpletap.BOT_NAME, simpletap.APP_URL)
 
 
 async def init_client():
-	client = TelegramClient('sessions/test', CONFIG['app_id'], CONFIG['app_hash'])
+	_start_time = datetime.datetime.now()
+
+	client = TelegramClient('tg_session', CONFIG['app_id'], CONFIG['app_hash'])
 	await client.start()
 	user_info = await client.get_me()
 
-	# simpletap_url = await utils.get_base_app_url(client, simpletap.BOT_NAME, simpletap.APP_URL)
+	simpletap_url = await get_simpletap_url(client)
 	app = simpletap.SimpleTap(simpletap_url, 1378906881)
-	# app.update_all()
 
-	await simpletap.complete_essential_tasks(client, app)
+
+	while len(simpletap.get_essnsial_tasks(app)) > 0:
+		print('Completing essential tasks')
+		await simpletap.complete_essential_tasks(client, app)
+
+	print("Entering main loop...")
+	try:
+		while True:
+			app.update_all()
+
+			time.sleep(3)
+			if (datetime.datetime.now() - _start_time) > CHANGE_URL_TIMEOUT:
+				simpletap_url = await get_simpletap_url(client)
+				app.update_base_url(new_url=simpletap_url)
+				_start_time = datetime.datetime.now()
+	except Exception:
+		pass
+
 	# print(user_info.id)
 
+	print('Exiting...')
 	await client.disconnect()
-
-if __name__ == "__main__":
-	# test()
-	asyncio.run(init_client())
 
