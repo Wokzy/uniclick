@@ -4,11 +4,49 @@ import copy
 import urllib
 import requests
 
+from telethon import TelegramClient
+from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelRequest
+
 
 HTTP_MAX_RETRY = 2 # amount of http request retries
 BOT_NAME = 'Simple_Tap_Bot'
 APP_URL = 'https://simpletap.app/'
 API_URL = 'https://api.thesimpletap.app/api/v1/public/telegram/'
+
+
+__ESSENTIAL_TASKS_TG_CHANNELS = ['smpl_app', 'alexfromsimple']
+
+
+def get_essnsial_tasks(class_instance):
+	return [i for i in class_instance.make_post_request('get-task-list-2')['data']['social'] if i['isRequire'] and i['status'] < 3]
+
+
+async def complete_essential_tasks(client:TelegramClient, class_instance):
+	""" status == 3 means that the task was completed """
+	tasks = get_essnsial_tasks(class_instance)
+	message = ''
+
+	for task in tasks:
+		if task['status'] == 1:
+			class_instance.make_post_request('start-task-start-2', payload={'type':task['type'], 'id':task['id']})
+
+		for channel in __ESSENTIAL_TASKS_TG_CHANNELS:
+			if channel in task['url']:
+				await client(JoinChannelRequest(channel = channel))
+				response = class_instance.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
+				await client(LeaveChannelRequest(channel = channel))
+
+		class_instance.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
+
+		if 'token1win_bot' in task['url']:
+			message = f'Go to {task['url']} and run the application to complete one of the manual essential tasks'
+
+	if len(get_essnsial_tasks(class_instance)) == 0:
+		print('Completed essential tasks')
+	else:
+		print(message)
+
+	# return tasks
 
 
 class SimpleTap:
@@ -96,17 +134,22 @@ class SimpleTap:
 		headers = self.get_post_headers()
 		url = urllib.parse.urljoin(API_URL, method)
 
-		result = requests.post(url, headers=headers, json=data)
 		_error_message = f"Error encountered in: {url}"
 
 		# print(url)
 
+		result = None
 		for i in range(HTTP_MAX_RETRY):
+			try:
+				result = requests.post(url, headers=headers, json=data)
+			except:
+				time.sleep(1)
+				continue
+
 			if result.status_code in {200, 201} and result.json()['result'] == 'OK':
 				return result.json()
 
 			time.sleep(1)
-			result = requests.post(url, headers=headers, json=data)
 
 		assert result.status_code in {200, 201}, _error_message
 		assert result.json()['result'] == 'OK', _error_message
