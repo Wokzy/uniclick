@@ -15,7 +15,7 @@ from apps import simpletap
 
 
 CONFIG = utils.load_config()
-CHANGE_URL_TIMEOUT = datetime.timedelta(seconds=10)
+CHANGE_URL_TIMEOUT = datetime.timedelta(days=1)
 
 
 async def get_simpletap_url(client):
