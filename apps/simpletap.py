@@ -12,12 +12,13 @@ from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelReque
 CONFIG = utils.load_config()['apps']['simpletap']
 
 
-HTTP_MAX_RETRY = 2 # amount of http request retries
+HTTP_MAX_RETRY = 5 # amount of http request retries
 BOT_NAME = 'Simple_Tap_Bot'
 APP_URL = 'https://simpletap.app/'
 API_URL = 'https://api.thesimpletap.app/api/v1/public/telegram/'
 
-__ESSENTIAL_TASKS_TG_CHANNELS = ['smpl_app', 'alexfromsimple']
+ESSENTIAL_TASKS_TG_CHANNELS = ['smpl_app', 'alexfromsimple']
+EXCEPTIONAL_TASKS = frozenset({9900628480, 9900628482})
 
 
 def get_essnsial_tasks(class_instance):
@@ -33,7 +34,7 @@ async def complete_essential_tasks(client:TelegramClient, class_instance):
 		if task['status'] == 1:
 			class_instance.make_post_request('start-task-start-2', payload={'type':task['type'], 'id':task['id']})
 
-		for channel in __ESSENTIAL_TASKS_TG_CHANNELS:
+		for channel in ESSENTIAL_TASKS_TG_CHANNELS:
 			if channel in task['url']:
 				await client(JoinChannelRequest(channel = channel))
 				response = class_instance.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
@@ -142,18 +143,24 @@ class SimpleTap:
 		global blocks
 		blocks = self.get_mining_blocks()
 
-		def __buy_mining(name) -> bool:
+		def __buy_mining(name, force='') -> bool:
 			global blocks
 
 			if blocks[name]['dependencyMineId'] is not None:
 				while blocks[name]['dependencyMineLevel'] > blocks[blocks[name]['dependencyMineId']]['currentLevel']:
-					if not __buy_mining(blocks[blocks[name]['dependencyMineId']]['mineId']):
+					if not __buy_mining(blocks[blocks[name]['dependencyMineId']]['mineId'], force=name):
 						return False
 
 			if blocks[name]['nextPrice'] > self.fetch_user_data()['balance']:
 				return False
 
-			print(f'Upgrading {blocks[name]["mineId"]} to level {blocks[name]["currentLevel"] + 1}')
+			string = f'Upgrading {blocks[name]["mineId"]} to level {blocks[name]["currentLevel"] + 1}'
+
+			if force:
+				print(f'{string} (required by {force})')
+			else:
+				print(string)
+
 			self.make_post_request('buy-mining-block', payload={"mineId":blocks[name]['mineId'], "level":blocks[name]['currentLevel'] + 1})
 			blocks = self.get_mining_blocks()
 			return True
@@ -163,6 +170,25 @@ class SimpleTap:
 				__buy_mining(name)
 
 
+	def _complete_tasks(self) -> None:
+		""" Complete inessential tasks, which does not require any effort """
+
+		tasks = [task for task in self.make_post_request('get-task-list-2')['data']['social'] if not task['isRequire'] and task['status'] < 3]
+
+		_easy_url_patterns = ['apps.apple.com', 'bit.ly', 'tiktok.com', 'linkedin.com', 'instagram.com', 'twitter.com', 'x.com']
+		# print(tasks)
+		for task in tasks:
+			if task['id'] in EXCEPTIONAL_TASKS:
+				continue
+
+			for url in _easy_url_patterns:
+				if task['url'] is None or url in task['url']:
+					print(f'Completing task {task["id"]}')
+					self.make_post_request('start-task-start-2', payload={'type':task['type'], 'id':task['id']})
+					self.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
+					break
+
+
 	def update_all(self):
 		user_data = self.fetch_user_data()
 
@@ -170,6 +196,7 @@ class SimpleTap:
 		self._farm_coins(user_data)
 		self._spin_wheel(user_data)
 		self._purchace_mining_blocks()
+		self._complete_tasks()
 
 
 	def make_post_request(self, method:str, payload:dict = {}) -> dict:
@@ -189,9 +216,13 @@ class SimpleTap:
 		result = None
 		for i in range(HTTP_MAX_RETRY):
 			try:
-				result = requests.post(url, headers=headers, json=data)
-			except:
-				time.sleep(1)
+				result = self.session.post(url, headers=headers, json=data)
+			except Exception as e:
+				time.sleep(3)
+				# print(e, 'retrying....')
+				# if result.status_code == 104:
+				# 	time.sleep(2)
+				# time.sleep(1)
 				continue
 
 			if result.status_code in {200, 201} and result.json()['result'] == 'OK':

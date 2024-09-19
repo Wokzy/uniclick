@@ -21,10 +21,10 @@ async def get_simpletap_url(client):
 	return await utils.get_base_app_url(client, simpletap.BOT_NAME, simpletap.APP_URL)
 
 
-async def init_client():
+async def init_client(session_name='sessions/test'):
 	_start_time = datetime.datetime.now()
 
-	client = TelegramClient('sessions/test', CONFIG['app_id'], CONFIG['app_hash'])
+	client = TelegramClient(session_name, CONFIG['app_id'], CONFIG['app_hash'])
 	await client.start()
 	user_info = await client.get_me()
 
