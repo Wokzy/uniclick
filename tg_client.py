@@ -1,15 +1,14 @@
 
-import asyncio
-
-from telethon import TelegramClient
-from telethon.sync import functions
-
+import sys
 import time
 import json
 import utils
+import asyncio
 import datetime
 
 from apps import simpletap
+from telethon import TelegramClient
+from telethon.sync import functions
 
 #http://t.me/token1win_bot/start?startapp=refId7463475999
 
@@ -25,11 +24,18 @@ async def get_simpletap_url(client):
 async def init_client():
 	_start_time = datetime.datetime.now()
 
-	client = TelegramClient('tg_session', CONFIG['app_id'], CONFIG['app_hash'])
+	client = TelegramClient('sessions/test', CONFIG['app_id'], CONFIG['app_hash'])
 	await client.start()
 	user_info = await client.get_me()
 
 	simpletap_url = await get_simpletap_url(client)
+	if '--debug' in sys.argv:
+		print(simpletap_url)
+
+	if '--exit' in sys.argv:
+		await client.disconnect()
+		return
+
 	app = simpletap.SimpleTap(simpletap_url, user_info.id)
 
 

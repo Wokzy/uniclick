@@ -1,6 +1,7 @@
 
 import time
 import copy
+import utils
 import urllib
 import requests
 
@@ -8,11 +9,13 @@ from telethon import TelegramClient
 from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelRequest
 
 
+CONFIG = utils.load_config()['apps']['simpletap']
+
+
 HTTP_MAX_RETRY = 2 # amount of http request retries
 BOT_NAME = 'Simple_Tap_Bot'
 APP_URL = 'https://simpletap.app/'
 API_URL = 'https://api.thesimpletap.app/api/v1/public/telegram/'
-
 
 __ESSENTIAL_TASKS_TG_CHANNELS = ['smpl_app', 'alexfromsimple']
 
@@ -99,6 +102,10 @@ class SimpleTap:
 		return self.make_post_request('profile')['data']
 
 
+	def get_mining_blocks(self) -> dict:
+		return {block['mineId']:block for block in self.make_post_request('get-mining-blocks')['data']['mines']}
+
+
 	def _tap_coins(self, user_data:dict) -> None:
 		""" Make availible taps """
 
@@ -122,10 +129,38 @@ class SimpleTap:
 
 	def _spin_wheel(self, user_data:dict) -> None:
 		""" Wheel spinning """
+
 		if user_data['spinCount'] > 0:
 			print('Spinning wheel')
 			self.make_post_request('claim-spin', payload={'amount':user_data['spinCount']})
 			print(f'Spinned wheel {user_data["spinCount"]}')
+
+
+	def _purchace_mining_blocks(self) -> None:
+		""" Buy 'mining' blocks (passive profit) """
+
+		global blocks
+		blocks = self.get_mining_blocks()
+
+		def __buy_mining(name) -> bool:
+			global blocks
+
+			if blocks[name]['dependencyMineId'] is not None:
+				while blocks[name]['dependencyMineLevel'] > blocks[blocks[name]['dependencyMineId']]['currentLevel']:
+					if not __buy_mining(blocks[blocks[name]['dependencyMineId']]['mineId']):
+						return False
+
+			if blocks[name]['nextPrice'] > self.fetch_user_data()['balance']:
+				return False
+
+			print(f'Upgrading {blocks[name]["mineId"]} to level {blocks[name]["currentLevel"] + 1}')
+			self.make_post_request('buy-mining-block', payload={"mineId":blocks[name]['mineId'], "level":blocks[name]['currentLevel'] + 1})
+			blocks = self.get_mining_blocks()
+			return True
+
+		for name in list(blocks.keys()):
+			if blocks[name]['currentLevel'] < CONFIG['max_cards_level']:
+				__buy_mining(name)
 
 
 	def update_all(self):
@@ -134,6 +169,7 @@ class SimpleTap:
 		self._tap_coins(user_data)
 		self._farm_coins(user_data)
 		self._spin_wheel(user_data)
+		self._purchace_mining_blocks()
 
 
 	def make_post_request(self, method:str, payload:dict = {}) -> dict:
@@ -163,6 +199,6 @@ class SimpleTap:
 
 			time.sleep(1)
 
-		assert result.status_code in {200, 201}, _error_message
+		assert result.status_code in {200, 201}, _error_message + f'\n{result.status_code}: {result.text} {result.request}'
 		assert result.json()['result'] == 'OK', _error_message
 		return result.json()

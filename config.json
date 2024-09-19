@@ -1,7 +1,10 @@
 {
 	"app_id":24655742,
 	"app_hash":"94afadedfbe74a4c5388837ecb34741e",
-	"enabled_applications":{
-		"simple_tap":true
+	"apps":{
+		"simpletap":{
+			"enabled":true,
+			"max_cards_level":10
+		}
 	}
 }
