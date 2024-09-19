@@ -30,7 +30,7 @@ async def init_client():
 	user_info = await client.get_me()
 
 	simpletap_url = await get_simpletap_url(client)
-	app = simpletap.SimpleTap(simpletap_url, 1378906881)
+	app = simpletap.SimpleTap(simpletap_url, user_info.id)
 
 
 	while len(simpletap.get_essnsial_tasks(app)) > 0:
