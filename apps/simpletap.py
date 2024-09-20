@@ -1,4 +1,5 @@
 
+import sys
 import time
 import copy
 import utils
@@ -18,40 +19,7 @@ APP_URL = 'https://simpletap.app/'
 API_URL = 'https://api.thesimpletap.app/api/v1/public/telegram/'
 
 ESSENTIAL_TASKS_TG_CHANNELS = ['smpl_app', 'alexfromsimple']
-EXCEPTIONAL_TASKS = frozenset({9900628480, 9900628482})
-
-
-def get_essnsial_tasks(class_instance):
-	return [i for i in class_instance.make_post_request('get-task-list-2')['data']['social'] if i['isRequire'] and i['status'] < 3]
-
-
-async def complete_essential_tasks(client:TelegramClient, class_instance):
-	""" status == 3 means that the task was completed """
-	tasks = get_essnsial_tasks(class_instance)
-	message = ''
-
-	for task in tasks:
-		if task['status'] == 1:
-			class_instance.make_post_request('start-task-start-2', payload={'type':task['type'], 'id':task['id']})
-
-		for channel in ESSENTIAL_TASKS_TG_CHANNELS:
-			if channel in task['url']:
-				await client(JoinChannelRequest(channel = channel))
-				response = class_instance.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
-				await client(LeaveChannelRequest(channel = channel))
-
-		class_instance.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
-
-		if 'token1win_bot' in task['url']:
-			message = f'Go to {task['url']} and run the application to complete one of the manual essential tasks'
-
-	if len(get_essnsial_tasks(class_instance)) == 0:
-		print('Completed essential tasks')
-	else:
-		print(message)
-		input('Print [Y] if you are done -> ')
-
-	# return tasks
+# EXCEPTIONAL_TASKS = frozenset({9900628480, 9900628482})
 
 
 class SimpleTap:
@@ -175,18 +143,19 @@ class SimpleTap:
 
 		tasks = [task for task in self.make_post_request('get-task-list-2')['data']['social'] if not task['isRequire'] and task['status'] < 3]
 
-		_easy_url_patterns = ['apps.apple.com', 'bit.ly', 'tiktok.com', 'linkedin.com', 'instagram.com', 'twitter.com', 'x.com']
+		# _easy_url_patterns = ['apps.apple.com', 'bit.ly', 'tiktok.com', 'linkedin.com', 'instagram.com', 'twitter.com', 'x.com']
 		# print(tasks)
 		for task in tasks:
-			if task['id'] in EXCEPTIONAL_TASKS:
-				continue
+			# if task['id'] in EXCEPTIONAL_TASKS:
+			# 	continue
 
-			for url in _easy_url_patterns:
-				if task['url'] is None or url in task['url']:
-					print(f'Completing task {task["id"]}')
-					self.make_post_request('start-task-start-2', payload={'type':task['type'], 'id':task['id']})
-					self.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
-					break
+			# for url in _easy_url_patterns:
+				# if task['url'] is None or url in task['url']:
+					# print(f'Completing task {task["id"]}')
+
+			if task['status'] == 1:
+				self.make_post_request('start-task-start-2', payload={'type':task['type'], 'id':task['id']})
+			self.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
 
 
 	def update_all(self):
@@ -233,3 +202,60 @@ class SimpleTap:
 		assert result.status_code in {200, 201}, _error_message + f'\n{result.status_code}: {result.text} {result.request}'
 		assert result.json()['result'] == 'OK', _error_message
 		return result.json()
+
+
+
+def get_essnsial_tasks(class_instance:SimpleTap):
+	return [i for i in class_instance.make_post_request('get-task-list-2')['data']['social'] if i['isRequire'] and i['status'] < 3]
+
+
+async def token1win_(client:TelegramClient, class_instance:SimpleTap):
+	app_url = await utils.get_base_app_url(
+						client = client,
+						bot_name='token1win_bot',
+						app_url='https://cryptocklicker-frontend-rnd-prod.100hp.app/',
+						)
+
+	if '--debug' in sys.argv:
+		print(app_url)
+
+	if requests.get(app_url).status_code != 200:
+		print('WARNING: token1win error: status code is not 200')
+
+
+
+async def complete_essential_tasks(client:TelegramClient, class_instance:SimpleTap):
+	""" status == 3 means that the task was completed """
+	tasks = get_essnsial_tasks(class_instance)
+	message = ''
+
+	async def __complete():
+		for task in tasks:
+			if task['status'] == 1:
+				class_instance.make_post_request('start-task-start-2', payload={'type':task['type'], 'id':task['id']})
+
+			for channel in ESSENTIAL_TASKS_TG_CHANNELS:
+				if channel in task['url']:
+					await client(JoinChannelRequest(channel = channel))
+					response = class_instance.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
+					await client(LeaveChannelRequest(channel = channel))
+
+			class_instance.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
+
+			if 'token1win_bot' in task['url']:
+				await token1win_(client, class_instance)
+
+			# message = f'Go to {task['url']} and run the application to complete one of the manual essential tasks'
+
+	await __complete()
+
+	while len(get_essnsial_tasks(class_instance)) > 0:
+		print('Recompleting essential tasks')
+		await __complete()
+
+	print('Completed essential tasks')
+	# else:
+	# 	print(message)
+	# 	input('Print [Y] if you are done -> ')
+
+	# return tasks

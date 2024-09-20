@@ -29,15 +29,16 @@ async def init_client(session_name='sessions/test'):
 	user_info = await client.get_me()
 
 	simpletap_url = await get_simpletap_url(client)
+	app = simpletap.SimpleTap(simpletap_url, user_info.id)
+
+
 	if '--debug' in sys.argv:
 		print(simpletap_url)
+		# await simpletap.token1win_(client, app)
 
 	if '--exit' in sys.argv:
 		await client.disconnect()
 		return
-
-	app = simpletap.SimpleTap(simpletap_url, user_info.id)
-
 
 	while len(simpletap.get_essnsial_tasks(app)) > 0:
 		print('Completing essential tasks')
