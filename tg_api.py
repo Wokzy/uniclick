@@ -28,6 +28,8 @@ async def init_client(session_name='sessions/test'):
 	await client.start()
 	user_info = await client.get_me()
 
+	client.send_message(simpletap.BOT_NAME, "/start")
+
 	simpletap_url = await get_simpletap_url(client)
 	app = simpletap.SimpleTap(simpletap_url, user_info.id)
 

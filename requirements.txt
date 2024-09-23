@@ -1,2 +1,5 @@
+# Python3.12 or higher
 
+requests
 telethon
+python-telegram-bot

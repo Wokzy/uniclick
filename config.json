@@ -1,9 +1,11 @@
 {
 	"app_id":24655742,
 	"app_hash":"94afadedfbe74a4c5388837ecb34741e",
-	"apps":{
-		"simpletap":{
-			"enabled":true,
+	"bot_token":"",
+	"admin_userid":0,
+	"default_user_config": {
+		"simpletap": {
+			"enabled":false,
 			"max_cards_level":10
 		}
 	}
