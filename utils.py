@@ -2,12 +2,20 @@
 import os
 import json
 
+from telegram import (
+	InlineKeyboardButton,
+	InlineKeyboardMarkup,
+)
+
 from telethon import TelegramClient
 from telethon.sync import functions
+
 from constants import (
 	CONFIG_FNAME,
 	TG_SESSIONS_DIR,
 	USER_DATA_DIR,
+	BUTTON_NAMINGS,
+	MISC_MESSAGES,
 )
 
 
@@ -44,7 +52,7 @@ def load_users(instance) -> dict:
 	with open(fname, 'r') as f:
 		users = json.load(f)
 
-	return {user_id: instance(**data) for user_id, data in users}
+	return {int(user_id): instance(**data) for user_id, data in users.items()}
 
 
 
@@ -61,3 +69,8 @@ async def get_base_app_url(client:TelegramClient, bot_name:str, app_url:str, pla
 			start_param=start_param
 		)
 	)).url
+
+
+def main_menu_keyboard():
+	""" Main menu keyboard alias """
+	return InlineKeyboardMarkup([[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]])

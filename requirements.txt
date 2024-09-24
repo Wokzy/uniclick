@@ -2,4 +2,4 @@
 
 requests
 telethon
-python-telegram-bot
+python-telegram-bot[job-queue]
