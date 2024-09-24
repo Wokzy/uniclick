@@ -97,7 +97,7 @@ class Bot:
 		if context._user_id != CONFIG['admin_userid']:
 			return
 
-		print('{clr.yellow}Loading sessions....')
+		print(f'{clr.yellow}Loading sessions....')
 
 		for user in self.connected_users.values():
 			if not os.path.exists(user.sessions_dir):
@@ -109,7 +109,9 @@ class Bot:
 				if await client.is_user_authorized():
 					user.tg_sessions[session]['client'] = client
 
-		print('{clr.green}Loaded!{clr.yellow}')
+		print(f'{clr.green}Loaded!{clr.yellow}')
+
+		await context.bot.send_message(context._chat_id, text=MISC_MESSAGES['load_tg_sessions'])
 
 
 	async def graceful_stop(self, update, context):
@@ -123,6 +125,8 @@ class Bot:
 				client = user.tg_sessions[session]['client']
 				if client.is_connected():
 					client.disconnect()
+
+		await context.bot.send_message(context._chat_id, text=MISC_MESSAGES['graceful_stop'])
 
 
 	async def handle_message(self, update, context) -> None:
@@ -138,9 +142,7 @@ class Bot:
 					return
 
 			for prefix in self._local_state_methods.keys():
-				print('123')
 				if user.current_state.startswith(prefix):
-					print('32423')
 					await self._local_state_methods[prefix](update, context)
 					return
 
@@ -163,7 +165,6 @@ class Bot:
 
 	async def main_menu(self, update, context) -> None:
 		if context._user_id not in self.connected_users.keys():
-			print(self.connected_users)
 			return
 
 		user = self.connected_users[context._user_id]
@@ -203,7 +204,6 @@ class Bot:
 		user.current_state = None
 		session_name = update.message.text[:12]
 
-		print('555555')
 
 		if ' ' in session_name or session_name in user.tg_sessions.keys():
 			keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu'),
@@ -213,9 +213,7 @@ class Bot:
 			await context.bot.send_message(user.chat_id, text=MISC_MESSAGES['wrong_session_name'], reply_markup=keyboard)
 			return
 
-		print('initializing client')
 		client = await tg_api.init_client(os.path.join(user.sessions_dir, session_name))
-		print('initialized client')
 		user.tg_sessions[session_name] = {'client':client}
 		await tg_api.auth_session(update, context, user, session_name=session_name)
 
@@ -224,7 +222,26 @@ class Bot:
 		user = self.connected_users[context._user_id]
 
 		await context.bot.answer_callback_query(update.callback_query.id)
-		await update.callback_query.edit_message_text(text=str(user.tg_sessions),
+
+		text = 'Choose an account from list:'
+		keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]]
+
+		for name in user.tg_sessions.keys():
+			keyboard.append([InlineKeyboardButton(name, callback_data=f'get_user_session {name}')])
+
+		keyboard = InlineKeyboardMarkup(keyboard)
+
+		await update.callback_query.edit_message_text(text=text,
+													  reply_markup=keyboard)
+
+
+	async def get_user_session(self, update, context):
+		await context.bot.answer_callback_query(update.callback_query.id)
+		user = self.connected_users[context._user_id]
+
+		name = update.callback_query.data.split(' ')[1]
+		_user_data = await user.tg_sessions[name]['client'].get_me()
+		await update.callback_query.edit_message_text(text=_user_data.stringify(),
 													  reply_markup=utils.main_menu_keyboard())
 
 
@@ -252,11 +269,12 @@ def main():
 	application.add_handler(MessageHandler(filters.TEXT, bot.handle_message))
 
 	callback_handlers = {
-			bot.main_menu : "main_menu",
-			bot.add_account : "add_account",
-			bot.my_accounts : "my_accounts",
-			bot.admin_panel : "admin_panel",
-			bot.faq : "faq",
+			bot.main_menu        : "main_menu",
+			bot.add_account      : "add_account",
+			bot.my_accounts      : "my_accounts",
+			bot.admin_panel      : "admin_panel",
+			bot.faq              : "faq",
+			bot.get_user_session : "get_user_session",
 	}
 
 	for function, pattern in callback_handlers.items():
@@ -266,10 +284,6 @@ def main():
 
 	application.run_polling()
 	bot.save_all_data()
-
-	async_tasks = asyncio.all_tasks()
-	for task in async_tasks:
-		task.cancel()
 
 
 if __name__ == '__main__':

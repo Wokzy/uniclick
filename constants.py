@@ -40,6 +40,8 @@ MISC_MESSAGES = {
 	"enquire_auth_code":"Enter the code you recieved for login in format <b>1-2-3-4-5</b>:",
 	"failed_to_authorize":"Failed to authorize, perhaps incorrect credentials",
 	"authorized_successfully":"Successfully authorized your account, it can be managed in <b>My accounts</b> section",
-	"invalid_phone_code":"Login code you entered is invalid"
+	"invalid_phone_code":"Login code you entered is invalid",
+	"load_tg_sessions":"Loaded!",
+	"graceful_stop":"You can now stop bot application"
 }
 

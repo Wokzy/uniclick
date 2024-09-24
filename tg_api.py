@@ -67,8 +67,6 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 		code = update.message.text.replace('-', '')
 		session = user.tg_sessions[session_name]
 
-		print(session)
-
 		try:
 			me = await client.sign_in(phone=session['phone'], code=code)
 		except telethon.errors.SessionPasswordNeededError:
