@@ -26,10 +26,12 @@ class AppsService(threading.Thread):
 		self.config = config
 
 		self.update_queue = queue.Queue()
-		self.status_queue = queue.Queue()
+		# self.status_queue = queue.Queue()
 		self.applications = {}
 		self.application_initializers = {'simpletap':simpletap.simpletap_init}
 		self.applications_updaters = {'simpletap':simpletap.simpletap_update}
+
+		self.running = True
 
 
 	def run(self):
@@ -37,14 +39,19 @@ class AppsService(threading.Thread):
 		loop.run_until_complete(self.main())
 
 
-	async def main(self):
+	def stop(self):
+		self.running = False
+		for client in self.clients.values():
+			client.disconnect()
 
-		while True:
-			print('main loop')
+
+	async def main(self):
+		self.running = True
+
+		while self.running:
 			await self.fetch_updates()
 			await self.init_applications()
 			await self.update_applications()
-			await self.fetch_status()
 
 			await asyncio.sleep(2)
 
@@ -53,7 +60,6 @@ class AppsService(threading.Thread):
 		""" Apply updates from queue """
 
 		while not self.update_queue.empty():
-			print('fetch_updates')
 			request = self.update_queue.get()
 
 			if request['type'] == 'update_config':
@@ -62,38 +68,47 @@ class AppsService(threading.Thread):
 				del self.clients[request['data']]
 				del self.applications[request['data']]
 			elif request['type'] == 'add_client':
-				self.clients[request['data']] = await init_client(request['data'])
-				self.applications[request['data']] = {}
+				client = await init_client(request['data']['path'])
+				if not await client.is_user_authorized():
+					return
+
+				self.clients[request['data']['name']] = client
+				self.applications[request['data']['name']] = {}
 
 
-	async def fetch_status(self):
+	def fetch_status(self):
 		""" Get applications statuses and warnings """
 
-		status = {cl_name:{name:{'status':app.status, 'warning':app.warning} for name, app in self.applications[cl_name].items()} for cl_name in self.clients.keys()}
+		return {cl_name:{name:{'status':app.status, 'warning':app.warning} for name, app in self.applications[cl_name].items()} for cl_name in self.clients.keys()}
 
-		while not self.status_queue.empty():
-			self.status_queue.get()
+		# while not self.status_queue.empty():
+		# 	self.status_queue.get()
 
-		self.status_queue.put(status)
+		# self.status_queue.put(status)
 
 
 	async def init_applications(self):
 		""" Start applications objects"""
 
-		print('init_applications')
+		_rm_list = []
 
 		for cl_name, client in self.clients.items():
+			if not await client.is_user_authorized():
+				if client.is_connected():
+					client.disconnect()
+				_rm_list.append(cl_name)
+
 			for name, method in self.application_initializers.items():
 				if self.config[name]['enabled']:
 					self.applications[cl_name]['simpletap'] = await simpletap.simpletap_init(client, self.config[name])
 					# self.applications[cl_name][name] = await method(client, self.config[name])
 
+		for cl_name in _rm_list:
+			del self.clients[cl_name]
+
 
 	async def update_applications(self):
 		""" Update each application """
-
-		print('update_applications')
-		print(self.clients)
 
 		for cl_name, client in self.clients.items():
 			_rm_list = []

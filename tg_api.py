@@ -63,7 +63,6 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 		code = update.message.text.replace('-', '')
 		session = user.tg_sessions[session_name]
 
-		print(session['password'])
 		try:
 			me = await client.sign_in(phone=session['phone'], code=code, password=session['password'])
 		except telethon.errors.rpcerrorlist.PhoneCodeInvalidError:
@@ -71,16 +70,17 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 										   text=MISC_MESSAGES['invalid_phone_code'],
 										   reply_markup=utils.main_menu_keyboard())
 			del user.tg_sessions[session_name]
-			client.disconnect()
 			return
 		except telethon.errors.rpcerrorlist.SessionPasswordNeededError:
 			me = await client.sign_in(phone=session['phone'], password=session['password'])
-		# except Exception:
-		# 	await context.bot.send_message(user.chat_id,
-		# 								   text=MISC_MESSAGES['failed_to_authorize'],
-		# 								   reply_markup=utils.main_menu_keyboard())
-		# 	del user.tg_sessions[session_name]
-		# 	return
+		except Exception:
+			await context.bot.send_message(user.chat_id,
+										   text=MISC_MESSAGES['failed_to_authorize'],
+										   reply_markup=utils.main_menu_keyboard())
+			del user.tg_sessions[session_name]
+			return
+		finally:
+			client.disconnect()
 
 		# if not await client.is_user_authorized():
 		# 	await context.bot.send_message(user.chat_id,
@@ -88,11 +88,9 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 		# 								   reply_markup=utils.main_menu_keyboard())
 		# 	del user.tg_sessions[session_name]
 		# 	return
-		me = await client.get_me()
-		client.disconnect()
 
-		user.tg_sessions[session_name]['user_id'] = me.id
-		user.app_service.update_queue.put({'type':'add_client', 'data':os.path.join(user.sessions_dir, session_name)})
+		user.tg_sessions[session_name] = {'user_id':me.id}
+		user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
 
 		await context.bot.send_message(user.chat_id,
 									   text=MISC_MESSAGES['authorized_successfully'],

@@ -109,7 +109,7 @@ class Bot:
 				os.mkdir(user.sessions_dir)
 
 			for session in user.tg_sessions.keys():
-				user.app_service.update_queue.put({'type':'add_client', 'data':os.path.join(user.sessions_dir, session)})
+				user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session), 'name':session}})
 
 			user.app_service.start()
 			print('popoppo')
@@ -126,11 +126,7 @@ class Bot:
 		self.save_all_data()
 
 		for user in self.connected_users.values():
-
-			for session in user.tg_sessions.keys():
-				client = user.tg_sessions[session]['client']
-				if client.is_connected():
-					client.disconnect()
+			user.app_service.stop()
 
 		await context.bot.send_message(context._chat_id, text=MISC_MESSAGES['graceful_stop'])
 
@@ -232,6 +228,11 @@ class Bot:
 		text = 'Choose an account from list:'
 		keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]]
 
+		for name in user.app_service.clients.keys():
+			if name not in user.tg_sessions.keys():
+				del user.tg_sessions[name]
+				text += f'\n<b>Account {name} was removed due to telegram session error (try to recreate)</b>'
+
 		for name in user.tg_sessions.keys():
 			keyboard.append([InlineKeyboardButton(name, callback_data=f'get_user_session {name}')])
 
@@ -241,34 +242,31 @@ class Bot:
 													  reply_markup=keyboard)
 
 
-	async def get_user_session(self, update, context):
+	async def get_user_session(self, update, context) -> None:
 		await context.bot.answer_callback_query(update.callback_query.id)
 		user = self.connected_users[context._user_id]
 
 		name = update.callback_query.data.split(' ')[1]
 
-		if user.app_service.status_queue.empty():
-			text = f'{user.app_service.is_alive()}'
-		else:
-			statuses = user.app_service.status_queue.get()[name]
-			text = ''
+		statuses = user.app_service.fetch_status()[name]
+		text = ''
 
-			for app in status:
-				app_text = '{}\n\tStatus: {}\n\n\tWarnings:{}'
+		for name, status in statuses.items():
+			app_text = '{}\n\tStatus: {}\n\n\tWarnings:{}'
 
-				if status['status'] is None:
-					_status_text = 'active 🟢'
-				elif status['status'] == 'error':
-					_status_text = 'inactive due to error 🔺'
-				else:
-					_status_text = f'{status["status"]} 🟡'
+			if status['status'] is None:
+				_status_text = 'active 🟢'
+			elif status['status'] == 'error':
+				_status_text = 'inactive due to error 🔺'
+			else:
+				_status_text = f'{status["status"]} 🟡'
 
-				if status['warning'] is None:
-					_warning_text = 'no warnings 🟢'
-				else:
-					_warning_text = f'{status["warning"]} 🟡'
+			if status['warning'] is None:
+				_warning_text = 'no warnings 🟢'
+			else:
+				_warning_text = f'{status["warning"]} 🟡'
 
-				text += app_text.format(app.name, _status_text, _warning_text)
+			text += app_text.format(name, _status_text, _warning_text)
 
 		await update.callback_query.edit_message_text(text=text,
 													  reply_markup=utils.main_menu_keyboard())
