@@ -5,17 +5,8 @@ Uniclick application
 import os
 import sys
 import copy
-import utils
-import tg_api
 import asyncio
 import datetime
-
-from constants import (
-	clr,
-	BUTTON_NAMINGS,
-	MISC_MESSAGES,
-	TG_SESSIONS_DIR,
-)
 
 from telegram import (
 	InlineKeyboardButton,
@@ -32,7 +23,19 @@ from telegram.ext import (
 	filters,
 )
 
+import utils
+import tg_api
 
+from apps.apps_init import AppsService
+from constants import (
+	clr,
+	BUTTON_NAMINGS,
+	MISC_MESSAGES,
+	TG_SESSIONS_DIR,
+)
+
+
+# TODO: init clients in dedicated thread
 CONFIG = utils.load_config()
 
 
@@ -50,6 +53,8 @@ class BotUser:
 
 		self.tg_sessions = copy.deepcopy(tg_sessions)
 		self.current_config = copy.deepcopy(current_config)
+
+		self.app_service = AppsService(self.current_config)
 
 		self.sessions_dir = os.path.join(TG_SESSIONS_DIR, str(self.user_id))
 
@@ -98,16 +103,16 @@ class Bot:
 			return
 
 		print(f'{clr.yellow}Loading sessions....')
-
 		for user in self.connected_users.values():
+
 			if not os.path.exists(user.sessions_dir):
 				os.mkdir(user.sessions_dir)
 
 			for session in user.tg_sessions.keys():
-				client = await tg_api.init_client(os.path.join(user.sessions_dir, session))
+				user.app_service.update_queue.put({'type':'add_client', 'data':os.path.join(user.sessions_dir, session)})
 
-				if await client.is_user_authorized():
-					user.tg_sessions[session]['client'] = client
+			user.app_service.start()
+			print('popoppo')
 
 		print(f'{clr.green}Loaded!{clr.yellow}')
 
@@ -121,6 +126,7 @@ class Bot:
 		self.save_all_data()
 
 		for user in self.connected_users.values():
+
 			for session in user.tg_sessions.keys():
 				client = user.tg_sessions[session]['client']
 				if client.is_connected():
@@ -240,8 +246,31 @@ class Bot:
 		user = self.connected_users[context._user_id]
 
 		name = update.callback_query.data.split(' ')[1]
-		_user_data = await user.tg_sessions[name]['client'].get_me()
-		await update.callback_query.edit_message_text(text=_user_data.stringify(),
+
+		if user.app_service.status_queue.empty():
+			text = f'{user.app_service.is_alive()}'
+		else:
+			statuses = user.app_service.status_queue.get()[name]
+			text = ''
+
+			for app in status:
+				app_text = '{}\n\tStatus: {}\n\n\tWarnings:{}'
+
+				if status['status'] is None:
+					_status_text = 'active 🟢'
+				elif status['status'] == 'error':
+					_status_text = 'inactive due to error 🔺'
+				else:
+					_status_text = f'{status["status"]} 🟡'
+
+				if status['warning'] is None:
+					_warning_text = 'no warnings 🟢'
+				else:
+					_warning_text = f'{status["warning"]} 🟡'
+
+				text += app_text.format(app.name, _status_text, _warning_text)
+
+		await update.callback_query.edit_message_text(text=text,
 													  reply_markup=utils.main_menu_keyboard())
 
 
@@ -253,7 +282,7 @@ class Bot:
 		await context.bot.answer_callback_query(update.callback_query.id)
 
 
-
+# 🟢🟡🔺
 
 def main():
 	print(f'{clr.green}Starting bot...')

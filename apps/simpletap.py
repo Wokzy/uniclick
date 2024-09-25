@@ -10,7 +10,7 @@ from telethon import TelegramClient
 from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelRequest
 
 
-CONFIG = utils.load_config()['apps']['simpletap']
+# CONFIG = utils.load_config()['apps']['simpletap']
 
 
 HTTP_MAX_RETRY = 5 # amount of http request retries
@@ -23,11 +23,18 @@ ESSENTIAL_TASKS_TG_CHANNELS = ['smpl_app', 'alexfromsimple']
 
 
 class SimpleTap:
-	def __init__(self, base_url:str, user_id:int):
+	def __init__(self, base_url:str, user_id:int, config:dict):
+		self.name = 'SimpleTap'
+
 		self.base_url = base_url
 		self.user_id = user_id
 		self.auth_data = self.extract_auth_data()
 		self.session = requests.Session()
+
+		self.status = None
+		self.warning = None
+
+		self.config = config
 
 
 	def get_post_headers(self) -> dict:
@@ -134,7 +141,7 @@ class SimpleTap:
 			return True
 
 		for name in list(blocks.keys()):
-			if blocks[name]['currentLevel'] < CONFIG['max_cards_level']:
+			if blocks[name]['currentLevel'] < self.config['max_cards_level']:
 				__buy_mining(name)
 
 
@@ -159,6 +166,7 @@ class SimpleTap:
 
 
 	def update_all(self):
+		print('updating all')
 		user_data = self.fetch_user_data()
 
 		self._tap_coins(user_data)
@@ -248,14 +256,48 @@ async def complete_essential_tasks(client:TelegramClient, class_instance:SimpleT
 			# message = f'Go to {task['url']} and run the application to complete one of the manual essential tasks'
 
 	await __complete()
+	attemts = 3
 
-	while len(get_essnsial_tasks(class_instance)) > 0:
-		print('Recompleting essential tasks')
+	while len(get_essnsial_tasks(class_instance)) > 0 and attemts > 0:
+		app.warning = 'Smth wrong with essential tasks completion, try to run token1win_bot (that is one of the problematic tasks)'
 		await __complete()
 
-	print('Completed essential tasks')
 	# else:
 	# 	print(message)
 	# 	input('Print [Y] if you are done -> ')
 
 	# return tasks
+
+
+async def get_simpletap_url(client:TelegramClient) -> str:
+	return await utils.get_base_app_url(client, BOT_NAME, APP_URL)
+
+
+async def simpletap_init(client:TelegramClient, config) -> SimpleTap:
+	url = await get_simpletap_url(client)
+	user = await client.get_me()
+
+	return SimpleTap(url, user.id, config=config)
+
+
+async def simpletap_update(app:SimpleTap, client:TelegramClient) -> None:
+
+	print(len(get_essnsial_tasks(app)))
+
+	if len(get_essnsial_tasks(app)) > 0:
+		if app.status is None:
+			app.status = 'completing essential tasks'
+
+		await complete_essential_tasks(client, app)
+		return
+
+	try:
+		# print('update all')
+		app.update_all()
+		app.status = None
+		app.warning = None
+	except Exception as e:
+		print(e)
+		app.status = 'error'
+		app.warning = e
+
