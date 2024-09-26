@@ -221,6 +221,7 @@ def get_essnsial_tasks(class_instance:SimpleTap):
 
 
 async def token1win_(client:TelegramClient, class_instance:SimpleTap):
+	await client.send_message('token1win_bot', f'/start')
 	app_url = await utils.get_base_app_url(
 						client = client,
 						bot_name='token1win_bot',
