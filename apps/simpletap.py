@@ -87,19 +87,21 @@ class SimpleTap:
 
 		if user_data['availableTaps'] > 10:
 			self.make_post_request('tap', {'count':user_data['availableTaps']})
-			print(f"Made {user_data['availableTaps']} taps")
+
+			if '--debug' in sys.argv:
+				print(f"Made {user_data['availableTaps']} taps")
 
 
 	def _farm_coins(self, user_data:dict) -> None:
 		""" Start farming and claim """
 
 		if user_data['activeFarmingSeconds'] >= user_data['maxFarmingSecondSec']:
-			print('Claiming farm...')
+			# print('Claiming farm...')
 			self.make_post_request('claim')
 			self.make_post_request('activate')
 
 		if user_data['activeFarmingSeconds'] == 0:
-			print('Staring farming...')
+			# print('Staring farming...')
 			self.make_post_request('activate')
 
 
@@ -107,9 +109,9 @@ class SimpleTap:
 		""" Wheel spinning """
 
 		if user_data['spinCount'] > 0:
-			print('Spinning wheel')
+			# print('Spinning wheel')
 			self.make_post_request('claim-spin', payload={'amount':user_data['spinCount']})
-			print(f'Spinned wheel {user_data["spinCount"]}')
+			# print(f'Spinned wheel {user_data["spinCount"]}')
 
 
 	def _purchace_mining_blocks(self) -> None:
@@ -131,10 +133,11 @@ class SimpleTap:
 
 			string = f'Upgrading {blocks[name]["mineId"]} to level {blocks[name]["currentLevel"] + 1}'
 
-			if force:
-				print(f'{string} (required by {force})')
-			else:
-				print(string)
+			if '--debug' in sys.argv:
+				if force:
+					print(f'{string} (required by {force})')
+				else:
+					print(string)
 
 			self.make_post_request('buy-mining-block', payload={"mineId":blocks[name]['mineId'], "level":blocks[name]['currentLevel'] + 1})
 			blocks = self.get_mining_blocks()
@@ -166,7 +169,7 @@ class SimpleTap:
 
 
 	def update_all(self):
-		print('updating all')
+		# print('updating all')
 		user_data = self.fetch_user_data()
 
 		self._tap_coins(user_data)
@@ -227,8 +230,8 @@ async def token1win_(client:TelegramClient, class_instance:SimpleTap):
 	if '--debug' in sys.argv:
 		print(app_url)
 
-	if requests.get(app_url).status_code != 200:
-		print('WARNING: token1win error: status code is not 200')
+		if requests.get(app_url).status_code != 200:
+			print('WARNING: token1win error: status code is not 200')
 
 
 
@@ -246,7 +249,7 @@ async def complete_essential_tasks(client:TelegramClient, class_instance:SimpleT
 				if channel in task['url']:
 					await client(JoinChannelRequest(channel = channel))
 					response = class_instance.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
-					await client(LeaveChannelRequest(channel = channel))
+					# await client(LeaveChannelRequest(channel = channel))
 
 			class_instance.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
 
@@ -259,7 +262,7 @@ async def complete_essential_tasks(client:TelegramClient, class_instance:SimpleT
 	attemts = 3
 
 	while len(get_essnsial_tasks(class_instance)) > 0 and attemts > 0:
-		app.warning = 'Smth wrong with essential tasks completion, try to run token1win_bot (that is one of the problematic tasks)'
+		class_instance.warning = 'Smth wrong with essential tasks completion, try to run token1win_bot (that is one of the problematic tasks)'
 		await __complete()
 
 	# else:
@@ -282,8 +285,6 @@ async def simpletap_init(client:TelegramClient, config) -> SimpleTap:
 
 async def simpletap_update(app:SimpleTap, client:TelegramClient) -> None:
 
-	print(len(get_essnsial_tasks(app)))
-
 	if len(get_essnsial_tasks(app)) > 0:
 		if app.status is None:
 			app.status = 'completing essential tasks'
@@ -297,7 +298,7 @@ async def simpletap_update(app:SimpleTap, client:TelegramClient) -> None:
 		app.status = None
 		app.warning = None
 	except Exception as e:
-		print(e)
+		# print(e)
 		app.status = 'error'
 		app.warning = e
 

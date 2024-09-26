@@ -12,6 +12,7 @@ from telethon.sync import functions
 
 from constants import (
 	CONFIG_FNAME,
+	CACHE_DIR,
 	TG_SESSIONS_DIR,
 	USER_DATA_DIR,
 	BUTTON_NAMINGS,
@@ -32,6 +33,9 @@ def init_environment() -> None:
 
 	if not os.path.exists(USER_DATA_DIR):
 		os.mkdir(USER_DATA_DIR)
+
+	if not os.path.exists(CACHE_DIR):
+		os.mkdir(CACHE_DIR)
 
 
 def save_users(users:dict) -> None:

@@ -5,6 +5,7 @@
 	"admin_userid":0,
 	"default_user_config": {
 		"simpletap": {
+			"__field_types":{"enabled":"bool", "max_cards_level":"int"},
 			"enabled":false,
 			"max_cards_level":10
 		}

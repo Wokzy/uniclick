@@ -53,7 +53,7 @@ class AppsService(threading.Thread):
 			await self.init_applications()
 			await self.update_applications()
 
-			await asyncio.sleep(2)
+			await asyncio.sleep(3)
 
 
 	async def fetch_updates(self):
@@ -63,13 +63,17 @@ class AppsService(threading.Thread):
 			request = self.update_queue.get()
 
 			if request['type'] == 'update_config':
-				self.config = request[data]
+				self.config = request['data']
 			elif request['type'] == 'remove_client':
+				await self.clients[request['data']].log_out()
+				self.clients[request['data']].disconnect()
+
 				del self.clients[request['data']]
 				del self.applications[request['data']]
 			elif request['type'] == 'add_client':
 				client = await init_client(request['data']['path'])
 				if not await client.is_user_authorized():
+					client.disconnect()
 					return
 
 				self.clients[request['data']['name']] = client
@@ -78,13 +82,7 @@ class AppsService(threading.Thread):
 
 	def fetch_status(self):
 		""" Get applications statuses and warnings """
-
 		return {cl_name:{name:{'status':app.status, 'warning':app.warning} for name, app in self.applications[cl_name].items()} for cl_name in self.clients.keys()}
-
-		# while not self.status_queue.empty():
-		# 	self.status_queue.get()
-
-		# self.status_queue.put(status)
 
 
 	async def init_applications(self):
@@ -99,9 +97,8 @@ class AppsService(threading.Thread):
 				_rm_list.append(cl_name)
 
 			for name, method in self.application_initializers.items():
-				if self.config[name]['enabled']:
-					self.applications[cl_name]['simpletap'] = await simpletap.simpletap_init(client, self.config[name])
-					# self.applications[cl_name][name] = await method(client, self.config[name])
+				if self.config[name]['enabled'] and name not in self.applications[cl_name]:
+					self.applications[cl_name][name] = await method(client, self.config[name])
 
 		for cl_name in _rm_list:
 			del self.clients[cl_name]
@@ -115,8 +112,7 @@ class AppsService(threading.Thread):
 
 			for name, method in self.applications_updaters.items():
 				if self.config[name]['enabled']:
-					await simpletap.simpletap_update(app=self.applications[cl_name][name], client=client)
-					# await method(app=self.applications[cl_name][name], client=client)
+					await method(app=self.applications[cl_name][name], client=client)
 				elif name in self.applications[cl_name]:
 					_rm_list.append(name)
 

@@ -5,6 +5,7 @@ Bot constants
 CONFIG_FNAME = 'config.json'
 TG_SESSIONS_DIR = 'sessions/'
 USER_DATA_DIR = 'user_data/'
+CACHE_DIR = '_chache/'
 
 class clr:
 	"""
@@ -20,14 +21,22 @@ class clr:
 
 
 class BUTTON_NAMINGS:
-	main_menu = "Main menu"
-	authorize = "Authorize"
-	my_accounts = "My accounts"
-	add_account = "Add account"
-	faq = "FAQ"
-	admin_panel = "Admin panel"
-	return_to_main_menu = "Return to main menu"
-	try_again = "Try again"
+	main_menu                   = "Main menu"
+	authorize                   = "Authorize"
+	my_accounts                 = "My accounts"
+	add_account                 = "Add account"
+	faq                         = "FAQ"
+	admin_panel                 = "Admin panel"
+	return_to_main_menu         = "Return to main menu"
+	try_again                   = "Try again"
+	delete_account              = "Disconnect account"
+	go_back                     = "go back"
+	confirm_account_deletion    = "Yes, im 100/100 sure"
+	default_login               = "VIA Phone number"
+	qr_login                    = "VIA QR CODE"
+	change_config               = "Change config"
+	disable_app                 = "Disable"
+	enable_app                  = "Enable"
 
 
 MISC_MESSAGES = {
@@ -42,6 +51,12 @@ MISC_MESSAGES = {
 	"authorized_successfully":"Successfully authorized your account, it can be managed in <b>My accounts</b> section",
 	"invalid_phone_code":"Login code you entered is invalid",
 	"load_tg_sessions":"Loaded!",
-	"graceful_stop":"You can now stop bot application"
+	"graceful_stop":"You can now stop bot application",
+	"confirm_account_deletion":"Are you sure about disconnection of {} account?",
+	"login_password_required":"Please enter cloud password:",
+	"choose_login_option":"Choose login option:",
+	"change_param":"Choose parameter to be changed:",
+	"invalid_value":"Invalid value",
+	"change_param_succeeded":"Parameter was changed successfully"
 }
 

@@ -1,15 +1,18 @@
 
+import io
 import os
 import utils
+import qrcode
 import asyncio
 import telethon
 
 # from apps import simpletap
 from constants import (
-	BUTTON_NAMINGS,
-	MISC_MESSAGES,
-	TG_SESSIONS_DIR,
 	clr,
+	CACHE_DIR,
+	MISC_MESSAGES,
+	BUTTON_NAMINGS,
+	TG_SESSIONS_DIR,
 )
 
 
@@ -97,3 +100,63 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 									   parse_mode="HTML",
 									   reply_markup=utils.main_menu_keyboard())
 
+
+async def auth_with_qrcode(update, context, user, session_name:str='') -> None:
+	""" Login with qrcode """
+
+	if user.current_state == None:
+		client = user.tg_sessions[session_name]['client']
+
+		qr_login = await client.qr_login()
+		img = qrcode.make(qr_login.url)
+
+		byte_buffer = io.BytesIO()
+		img.save(byte_buffer, format='PNG')
+
+		await context.bot.send_photo(user.chat_id, photo=byte_buffer.getvalue())
+
+		try:
+			await qr_login.wait()
+		except telethon.errors.rpcerrorlist.SessionPasswordNeededError:
+			await context.bot.send_message(users.chat_id, text=MISC_MESSAGES['login_password_required'])
+			user.current_state = f'auth_with_qrcode {session_name}'
+			return
+
+		me = await client.get_me()
+		client.disconnect()
+
+		user.tg_sessions[session_name] = {'user_id':me.id}
+		user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
+
+		await context.bot.send_message(user.chat_id,
+									   text=MISC_MESSAGES['authorized_successfully'],
+									   parse_mode="HTML",
+									   reply_markup=utils.main_menu_keyboard())
+
+		return
+
+	session_name = user.current_state.split(' ')[1]
+	password = update.message.text
+
+	await update.message.delete()
+
+	client = user.tg_sessions[session_name]['client']
+
+	try:
+		me = await client.sign_in(password=password)
+	except:
+		await context.bot.send_message(user.chat_id,
+										   text=MISC_MESSAGES['failed_to_authorize'],
+										   reply_markup=utils.main_menu_keyboard())
+		del user.tg_sessions[session_name]
+		return
+	finally:
+		client.disconnect()
+
+	user.tg_sessions[session_name] = {'user_id':me.id}
+	user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
+
+	await context.bot.send_message(user.chat_id,
+								   text=MISC_MESSAGES['authorized_successfully'],
+								   parse_mode="HTML",
+								   reply_markup=utils.main_menu_keyboard())
