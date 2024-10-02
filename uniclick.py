@@ -57,12 +57,16 @@ class BotUser:
 		self.app_service = AppsService(self.current_config)
 
 		self.sessions_dir = os.path.join(TG_SESSIONS_DIR, str(self.user_id))
+		if not os.path.exists(self.sessions_dir):
+			os.mkdir(self.sessions_dir)
 
 
 	def to_json(self) -> dict:
-		sessions = {sname: 
-					{'user_id':item['user_id']}
-					for sname, item in self.tg_sessions.items()}
+		sessions = {}
+
+		for sname, item in self.tg_sessions.items():
+			if 'user_id' in item.keys():
+				sessions[sname] = {'user_id':item['user_id']}
 
 		return {
 			"user_id":self.user_id,
@@ -157,6 +161,8 @@ class Bot:
 														 chat_id=context._chat_id,
 														 current_config=CONFIG['default_user_config'])
 
+		self.connected_users[context._user_id].app_service.start()
+
 		keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.main_menu, callback_data='main_menu')]]
 		keyboard = InlineKeyboardMarkup(keyboard)
 
@@ -234,8 +240,8 @@ class Bot:
 				return
 
 			keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')],
-						[InlineKeyboardButton(BUTTON_NAMINGS.default_login, callback_data=f'add_account default_login {session_name}'),
-						 InlineKeyboardButton(BUTTON_NAMINGS.qr_login, callback_data=f'add_account qr_login {session_name}')]]
+						[InlineKeyboardButton(BUTTON_NAMINGS.default_login, callback_data=f'add_account default_login {session_name}'),]]
+						 #InlineKeyboardButton(BUTTON_NAMINGS.qr_login, callback_data=f'add_account qr_login {session_name}')]]
 			keyboard = InlineKeyboardMarkup(keyboard)
 
 			await context.bot.send_message(user.chat_id,
@@ -254,8 +260,12 @@ class Bot:
 		_rm_list = []
 		for name in user.tg_sessions.keys():
 			if name not in user.app_service.clients.keys():
-				_rm_list.append(name)
-				text += f'\n<b>Account {name} was removed due to telegram session error (try to recreate)</b>'
+				print(user.app_service.clients.keys())
+				if user.app_service.update_queue.empty():
+					_rm_list.append(name)
+					text += f'\n<b>Account {name} was removed due to telegram session error (try to recreate)</b>'
+				else:
+					text += f'\nAccount <b>{name}</b> is starting, please wait for some time'
 
 		for name in _rm_list:
 			del user.tg_sessions[name]

@@ -5,6 +5,7 @@ import copy
 import utils
 import urllib
 import requests
+import datetime
 
 from telethon import TelegramClient
 from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelRequest
@@ -19,6 +20,7 @@ APP_URL = 'https://simpletap.app/'
 API_URL = 'https://api.thesimpletap.app/api/v1/public/telegram/'
 
 ESSENTIAL_TASKS_TG_CHANNELS = ['smpl_app', 'alexfromsimple']
+UPDATE_URL_TIMEOUT = datetime.timedelta(days=1)
 # EXCEPTIONAL_TASKS = frozenset({9900628480, 9900628482})
 
 
@@ -30,6 +32,7 @@ class SimpleTap:
 		self.user_id = user_id
 		self.auth_data = self.extract_auth_data()
 		self.session = requests.Session()
+		self.url_update_timer = datetime.datetime.now()
 
 		self.status = None
 		self.warning = None
@@ -286,14 +289,20 @@ async def simpletap_init(client:TelegramClient, config) -> SimpleTap:
 
 async def simpletap_update(app:SimpleTap, client:TelegramClient) -> None:
 
-	if len(get_essnsial_tasks(app)) > 0:
-		if app.status is None:
-			app.status = 'completing essential tasks'
-
-		await complete_essential_tasks(client, app)
-		return
-
 	try:
+		if len(get_essnsial_tasks(app)) > 0:
+			if app.status is None:
+				app.status = 'completing essential tasks'
+
+			await complete_essential_tasks(client, app)
+			return
+
+		if (datetime.datetime.now() - app.url_update_timer) > UPDATE_URL_TIMEOUT:
+			if '--debug' in sys.argv:
+				print('updating url')
+			app.url_update_timer = datetime.datetime.now()
+			app.update_base_url(new_url = await get_simpletap_url(client))
+
 		# print('update all')
 		app.update_all()
 		app.status = None

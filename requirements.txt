@@ -1,6 +1,9 @@
 # Python3.12 or higher
 
+aiodns
+Brotli
 qrcode
+aiohttp
 requests
 telethon
 python-telegram-bot[job-queue]

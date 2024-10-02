@@ -2,6 +2,7 @@
 Core of application and airdrops management
 """
 
+import time
 import queue
 import asyncio
 import telethon
@@ -53,27 +54,30 @@ class AppsService(threading.Thread):
 			await self.init_applications()
 			await self.update_applications()
 
-			await asyncio.sleep(3)
+			time.sleep(3)
 
 
 	async def fetch_updates(self):
 		""" Apply updates from queue """
 
+		self.update_queue.put({'type':'mock'})
 		while not self.update_queue.empty():
 			request = self.update_queue.get()
 
-			if request['type'] == 'update_config':
+			if request['type'] == 'mock':
+				break
+			elif request['type'] == 'update_config':
 				self.config = request['data']
 			elif request['type'] == 'remove_client':
 				await self.clients[request['data']].log_out()
-				self.clients[request['data']].disconnect()
+				await self.clients[request['data']].disconnect()
 
 				del self.clients[request['data']]
 				del self.applications[request['data']]
 			elif request['type'] == 'add_client':
 				client = await init_client(request['data']['path'])
 				if not await client.is_user_authorized():
-					client.disconnect()
+					await client.disconnect()
 					return
 
 				self.clients[request['data']['name']] = client
@@ -91,10 +95,14 @@ class AppsService(threading.Thread):
 		_rm_list = []
 
 		for cl_name, client in self.clients.items():
+			if not client.is_connected():
+				await client.connect()
+
 			if not await client.is_user_authorized():
 				if client.is_connected():
-					client.disconnect()
+					await client.disconnect()
 				_rm_list.append(cl_name)
+				continue
 
 			for name, method in self.application_initializers.items():
 				if self.config[name]['enabled'] and name not in self.applications[cl_name]:
@@ -108,6 +116,9 @@ class AppsService(threading.Thread):
 		""" Update each application """
 
 		for cl_name, client in self.clients.items():
+			if not client.is_connected():
+				await client.connect()
+
 			_rm_list = []
 
 			for name, method in self.applications_updaters.items():

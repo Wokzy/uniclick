@@ -51,46 +51,55 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 			await context.bot.send_message(user.chat_id,
 										   text=MISC_MESSAGES['incorrect_phone_format'],
 										   reply_markup=utils.main_menu_keyboard())
+			del user.tg_sessions[session_name]
 			return
 
-		await client.send_code_request(phone=phone, force_sms=False)
+		result = await client.sign_in(phone=phone)
 		user.tg_sessions[session_name]['phone'] = phone
 		user.tg_sessions[session_name]['password'] = password
+		user.tg_sessions[session_name]['phone_code_hash'] = result.phone_code_hash
 
 		user.current_state = f"auth_session enquire_auth_code {session_name}"
-		await context.bot.send_message(user.chat_id, text=MISC_MESSAGES['enquire_auth_code'])
+		await context.bot.send_message(user.chat_id, text=MISC_MESSAGES['enquire_auth_code'], parse_mode='HTML')
 		return
 
 
 	if state == 'enquire_auth_code':
 		code = update.message.text.replace('-', '')
 		session = user.tg_sessions[session_name]
+		me = None
 
-		try:
-			me = await client.sign_in(phone=session['phone'], code=code, password=session['password'])
-		except telethon.errors.rpcerrorlist.PhoneCodeInvalidError:
+
+		for i in range(5):
+			try:
+				me = await client.sign_in(phone=session['phone'],
+										  code=code,
+										  phone_code_hash=session['phone_code_hash'],
+										  password=session['password'])
+			except telethon.errors.rpcerrorlist.PhoneCodeInvalidError:
+				await context.bot.send_message(user.chat_id,
+											   text=MISC_MESSAGES['invalid_phone_code'],
+											   reply_markup=utils.main_menu_keyboard())
+				del user.tg_sessions[session_name]
+				return
+			except telethon.errors.rpcerrorlist.SessionPasswordNeededError:
+				me = await client.sign_in(phone=session['phone'],
+										  password=session['password'],
+										  phone_code_hash=session['phone_code_hash'])
+			except Exception:
+				continue
+
+			if me is not None:
+				break
+
+		if me is None:
 			await context.bot.send_message(user.chat_id,
-										   text=MISC_MESSAGES['invalid_phone_code'],
-										   reply_markup=utils.main_menu_keyboard())
+											   text=MISC_MESSAGES['failed_to_authorize'],
+											   reply_markup=utils.main_menu_keyboard())
 			del user.tg_sessions[session_name]
 			return
-		except telethon.errors.rpcerrorlist.SessionPasswordNeededError:
-			me = await client.sign_in(phone=session['phone'], password=session['password'])
-		except Exception:
-			await context.bot.send_message(user.chat_id,
-										   text=MISC_MESSAGES['failed_to_authorize'],
-										   reply_markup=utils.main_menu_keyboard())
-			del user.tg_sessions[session_name]
-			return
-		finally:
-			client.disconnect()
 
-		# if not await client.is_user_authorized():
-		# 	await context.bot.send_message(user.chat_id,
-		# 								   text=MISC_MESSAGES['failed_to_authorize'],
-		# 								   reply_markup=utils.main_menu_keyboard())
-		# 	del user.tg_sessions[session_name]
-		# 	return
+		client.disconnect()
 
 		user.tg_sessions[session_name] = {'user_id':me.id}
 		user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
@@ -111,15 +120,18 @@ async def auth_with_qrcode(update, context, user, session_name:str='') -> None:
 		img = qrcode.make(qr_login.url)
 
 		byte_buffer = io.BytesIO()
-		img.save(byte_buffer, format='PNG')
+		img.save(byte_buffer)
 
 		await context.bot.send_photo(user.chat_id, photo=byte_buffer.getvalue())
 
 		try:
-			await qr_login.wait()
+			await qr_login.wait(timeout=5.0)
 		except telethon.errors.rpcerrorlist.SessionPasswordNeededError:
-			await context.bot.send_message(users.chat_id, text=MISC_MESSAGES['login_password_required'])
+			await context.bot.send_message(user.chat_id, text=MISC_MESSAGES['login_password_required'])
 			user.current_state = f'auth_with_qrcode {session_name}'
+			return
+		except asyncio.TimeoutError:
+			await context.bot.send_message(user.chat_id, text="The time to login is up, please try again and be quicker")
 			return
 
 		me = await client.get_me()
@@ -142,16 +154,19 @@ async def auth_with_qrcode(update, context, user, session_name:str='') -> None:
 
 	client = user.tg_sessions[session_name]['client']
 
-	try:
-		me = await client.sign_in(password=password)
-	except:
+	for i in range(5):
+		try:
+			me = await client.sign_in(password=password)
+		except:
+			continue
+
+	client.disconnect()
+	if me is None:
 		await context.bot.send_message(user.chat_id,
 										   text=MISC_MESSAGES['failed_to_authorize'],
 										   reply_markup=utils.main_menu_keyboard())
 		del user.tg_sessions[session_name]
 		return
-	finally:
-		client.disconnect()
 
 	user.tg_sessions[session_name] = {'user_id':me.id}
 	user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
