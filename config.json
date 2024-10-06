@@ -2,6 +2,7 @@
 	"app_id":24655742,
 	"app_hash":"94afadedfbe74a4c5388837ecb34741e",
 	"bot_token":"",
+	"faq_post_link":"",
 	"admins":[],
 	"required_channels":[],
 	"default_user_config": {

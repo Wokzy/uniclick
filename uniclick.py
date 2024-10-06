@@ -79,8 +79,8 @@ class BotUser:
 		sessions = {}
 
 		for sname, item in self.tg_sessions.items():
-			if 'user_id' in item.keys():
-				sessions[sname] = {'user_id':item['user_id']}
+			if item.get('finished', False):
+				sessions[sname] = item
 
 		return {
 			"user_id":self.user_id,
@@ -249,7 +249,7 @@ class Bot:
 					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.profile, callback_data='profile'),
 					 InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.change_config, callback_data='view_config')],
 					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.invite_friends, callback_data='invite_friends')],
-					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.faq, callback_data='faq')]]
+					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.faq, url=CONFIG['faq_post_link'])]]
 
 		if context._user_id in CONFIG['admins']:
 			keyboard.append([InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.admin_panel, callback_data='admin_panel')])
@@ -512,9 +512,6 @@ class Bot:
 									   reply_markup=utils.main_menu_keyboard())
 
 
-	async def faq(self, update, context) -> None:
-		await context.bot.answer_callback_query(update.callback_query.id)
-
 
 # 🟢🟡🔺
 
@@ -539,7 +536,6 @@ def main():
 			bot.add_account      : "add_account",
 			bot.my_accounts      : "my_accounts",
 			bot.admin_panel      : "admin_panel",
-			bot.faq              : "faq",
 			bot.get_user_session : "get_user_session",
 			bot.delete_account   : "delete_account",
 			bot.view_config      : "view_config",
