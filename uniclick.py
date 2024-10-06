@@ -11,6 +11,7 @@ import datetime
 from telegram import (
 	InlineKeyboardButton,
 	InlineKeyboardMarkup,
+	helpers,
 )
 
 from telegram.ext import (
@@ -33,6 +34,7 @@ from constants import (
 	ONLY_BOT,
 	DEFAULT_LOCALE,
 	TG_SESSIONS_DIR,
+	DEFAULT_CUSTOMER_DATA,
 )
 
 
@@ -42,7 +44,8 @@ CONFIG = utils.load_config()
 
 class BotUser:
 	def __init__(self, user_id:int = 0, chat_id:int = 0, tg_sessions:dict = {},
-				 current_config:dict = {}, customer_data:dict = {}, locale:str = "eng"):
+				 current_config:dict = {}, customer_data:dict = DEFAULT_CUSTOMER_DATA,
+				 locale:str = "eng"):
 		""" 
 		Tg sessions are filenames of current sesisons
 		tg_sessions : {session_name:telethon.TelegramCliett}
@@ -54,6 +57,10 @@ class BotUser:
 
 		self.locale = locale
 		self.locale_module = LOCALES[locale]['module']
+
+		if not customer_data:
+			customer_data = DEFAULT_CUSTOMER_DATA
+
 		self.customer_data = copy.deepcopy(customer_data)
 
 		self.current_state = None
@@ -165,19 +172,26 @@ class Bot:
 					return
 
 
-	async def user_start(self, update, context) -> None:
+	async def ref_start(self, update, context) -> None:
+		""" Handler for referral start """
+		inviter_id = int(context.args[0])
+		await self.user_start(update, context, inviter_id=inviter_id)
+
+
+	async def user_start(self, update, context, inviter_id=0) -> None:
 
 		state = 'default'
 
 		if update.callback_query is not None:
 			await context.bot.answer_callback_query(update.callback_query.id)
-			state = update.callback_query.data.split(' ')[1]
+			state, inviter_id = update.callback_query.data.split(' ')[1::]
+			inviter_id = int(inviter_id)
 
 		if context._user_id in self.connected_users:
 			return
 
 		if state == 'default':
-			keyboard = [[InlineKeyboardButton(LOCALES[lc]['button'], callback_data=f'user_start {lc}')] for lc in LOCALES.keys()]
+			keyboard = [[InlineKeyboardButton(LOCALES[lc]['button'], callback_data=f'user_start {lc} {inviter_id}')] for lc in LOCALES.keys()]
 			keyboard = InlineKeyboardMarkup(keyboard)
 			await context.bot.send_message(context._chat_id,
 										   text="Select the bot language: ",
@@ -187,7 +201,7 @@ class Bot:
 			locale_module = LOCALES[state]['module']
 
 		if not await utils.channel_participaiton_check(update, context, channels=CONFIG['required_channels']):
-			keyboard = [[InlineKeyboardButton(locale_module.BUTTON_NAMINGS.channel_participaiton_check, callback_data=f"user_start {state}")]]
+			keyboard = [[InlineKeyboardButton(locale_module.BUTTON_NAMINGS.channel_participaiton_check, callback_data=f"user_start {state} {inviter_id}")]]
 			for channel in CONFIG['required_channels']:
 				keyboard.insert(0, [InlineKeyboardButton(channel, url=f"t.me/{channel}")])
 
@@ -204,7 +218,15 @@ class Bot:
 														 current_config=CONFIG['default_user_config'])
 
 		self.connected_users[context._user_id].app_service.start()
+		user = self.connected_users[context._user_id]
 
+		if inviter_id != 0 and user.user_id != inviter_id and user.customer_data.get('inviter_id', 0) == 0:
+			# Referral system:
+			user.customer_data['inviter_id'] = inviter_id
+			self.connected_users[inviter_id].customer_data['free_credits'] += 1
+			self.connected_users[inviter_id].customer_data['referral'].append(user.user_id)
+
+		self.save_all_data()
 		await self.main_menu(update, context)
 
 		# keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.main_menu, callback_data='main_menu')]]
@@ -224,7 +246,9 @@ class Bot:
 
 		keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.my_accounts, callback_data='my_accounts'),
 					 InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.add_account, callback_data='add_account')],
-					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.change_config, callback_data='view_config')],
+					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.profile, callback_data='profile'),
+					 InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.change_config, callback_data='view_config')],
+					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.invite_friends, callback_data='invite_friends')],
 					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.faq, callback_data='faq')]]
 
 		if context._user_id in CONFIG['admins']:
@@ -245,8 +269,50 @@ class Bot:
 									   reply_markup=keyboard)
 
 
+	async def profile(self, update, context) -> None:
+		""" Show brief user's info """
+
+		await context.bot.answer_callback_query(update.callback_query.id)
+
+		user_instance = update.callback_query.from_user
+		user = self.connected_users[user_instance.id]
+		text = f"👤 Name: {user_instance.first_name}\n" + \
+			   f"🆔 ID: {user_instance.id}\n" + \
+			   f"👥 Your referral: {len(user.customer_data['referral'])}\n" + \
+			   f"🎁 Free credits: {user.customer_data['free_credits'] - len(user.tg_sessions)}\n" + \
+			   f"🏷 The number of your accounts in the robot: {len(user.tg_sessions)}"
+
+		await update.callback_query.edit_message_text(text=text,
+													  reply_markup=utils.main_menu_keyboard())
+
+
+	async def invite_friends(self, update, context) -> None:
+		""" Refer friends and show some info """
+
+		await context.bot.answer_callback_query(update.callback_query.id)
+
+		user = self.connected_users[update.callback_query.from_user.id]
+
+		text = f"👥 Your referral: {len(user.customer_data['referral'])}\n" + \
+			   f"🎁 Free credit: {user.customer_data['free_credits'] - len(user.tg_sessions)}\n" + \
+			   f"⚡️ By inviting your friends using the link below, you can get 1 free credit.\n" + \
+			   f"Also, if your friends join the robot from your link, they will receive 2 free credits.\n" + \
+			   f"Your invitation link 👇\n" + \
+			   f"{helpers.create_deep_linked_url(context.bot.username, str(user.user_id))}"
+
+		await update.callback_query.edit_message_text(text=text,
+													  reply_markup=utils.main_menu_keyboard())
+
+
 	async def add_account(self, update, context) -> None:
 		"""Call auth_session method"""
+
+		user = self.connected_users[context._user_id]
+
+		if user.customer_data['free_credits'] <= len(user.tg_sessions):
+			await context.bot.answer_callback_query(update.callback_query.id,
+													text='You have not enough free credits')
+			return
 
 		await tg_api.auth_session(update, context, user=self.connected_users[context._user_id])
 
@@ -353,6 +419,8 @@ class Bot:
 
 
 	async def view_config(self, update, context) -> None:
+		""" Shows user his config """
+
 		await context.bot.answer_callback_query(update.callback_query.id)
 		user = self.connected_users[context._user_id]
 
@@ -390,6 +458,8 @@ class Bot:
 
 
 	async def edit_config(self, update, context) -> None:
+		""" User editing own config """
+
 		user = self.connected_users[context._user_id]
 
 		def _apply_config():
@@ -457,6 +527,7 @@ def main():
 
 	application = Application.builder().token(CONFIG['bot_token']).read_timeout(7).get_updates_read_timeout(42).build()
 
+	application.add_handler(CommandHandler("start", bot.ref_start, filters.Regex(r"\d+")))
 	application.add_handler(CommandHandler("start", bot.user_start))
 	application.add_handler(CommandHandler("main_menu", bot.main_menu))
 	application.add_handler(CommandHandler("save_all", bot.async_save))
@@ -474,6 +545,8 @@ def main():
 			bot.view_config      : "view_config",
 			bot.edit_config      : "edit_config",
 			bot.user_start       : "user_start",
+			bot.profile          : "profile",
+			bot.invite_friends   : "invite_friends",
 	}
 
 	for function, pattern in callback_handlers.items():

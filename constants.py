@@ -19,6 +19,12 @@ CACHE_DIR = '_chache/'
 LOCALES = {'eng':{"module":english_lc, "button":"🇺🇸 English"}}
 DEFAULT_LOCALE = LOCALES['eng']['module']
 
+DEFAULT_CUSTOMER_DATA = {
+			"referral":[],
+			"free_credits":2,
+			"inviter_id":0,
+			}
+
 class clr:
 	"""
 		Logging colors

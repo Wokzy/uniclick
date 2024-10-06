@@ -18,6 +18,8 @@ class BUTTON_NAMINGS:
 	disable_app                 = "Disable"
 	enable_app                  = "Enable"
 	channel_participaiton_check = "Check"
+	profile                     = "👤 Profile"
+	invite_friends              =  "👋 Invite friends"
 
 
 MISC_MESSAGES = {

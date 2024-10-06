@@ -81,7 +81,7 @@ async def channel_participaiton_check(update, context, channels: list[str], user
 	for channel in channels:
 		# print(channel)
 		res = await context.bot.get_chat_member(f"@{channel}", user_id)
-		if res.status != 'member':
+		if res.status not in {'owner', 'member', 'creator', 'admin'}:
 			return False
 
 	return True

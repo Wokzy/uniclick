@@ -3,11 +3,11 @@
 	"app_hash":"94afadedfbe74a4c5388837ecb34741e",
 	"bot_token":"",
 	"admins":[],
-	"required_channels":[""],
+	"required_channels":[],
 	"default_user_config": {
 		"simpletap": {
 			"__field_types":{"enabled":"bool", "max_cards_level":"int"},
-			"enabled":true,
+			"enabled":false,
 			"max_cards_level":10
 		}
 	}
