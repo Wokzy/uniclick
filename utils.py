@@ -75,6 +75,19 @@ async def get_base_app_url(client:TelegramClient, bot_name:str, app_url:str, pla
 	)).url
 
 
+async def channel_participaiton_check(update, context, channels: list[str], user_id: int = 0) -> bool:
+	if not user_id:
+		user_id = context._user_id
+
+	for channel in channels:
+		# print(channel)
+		res = await context.bot.get_chat_member(f"@{channel}", user_id)
+		if res.status != 'member':
+			return False
+
+	return True
+
+
 def main_menu_keyboard():
 	""" Main menu keyboard alias """
 	return InlineKeyboardMarkup([[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]])

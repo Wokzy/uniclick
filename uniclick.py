@@ -29,8 +29,10 @@ import tg_api
 from apps.apps_init import AppsService
 from constants import (
 	clr,
-	BUTTON_NAMINGS,
+	DEBUG,
+	ONLY_BOT,
 	MISC_MESSAGES,
+	BUTTON_NAMINGS,
 	TG_SESSIONS_DIR,
 )
 
@@ -40,14 +42,18 @@ CONFIG = utils.load_config()
 
 
 class BotUser:
-	def __init__(self, user_id:int = 0, chat_id:int = 0, tg_sessions:dict = {}, current_config:dict = {}):
+	def __init__(self, user_id:int = 0, chat_id:int = 0,
+				 tg_sessions:dict = {}, current_config:dict = {}, customer_data:dict = {}):
 		""" 
 		Tg sessions are filenames of current sesisons
 		tg_sessions : {session_name:telethon.TelegramCliett}
+		Customer data is additional cosmetical data
 		"""
 
 		self.user_id = user_id
 		self.chat_id = chat_id
+
+		self.customer_data = copy.deepcopy(customer_data)
 
 		self.current_state = None
 
@@ -118,13 +124,16 @@ class Bot:
 			for session in user.tg_sessions.keys():
 				user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session), 'name':session}})
 
+			if '--debug' in sys.argv:
+				print(user.tg_sessions)
+
 			user.app_service.start()
 
 		print(f'{clr.green}Loaded!{clr.yellow}')
 
 
 	async def graceful_stop(self, update, context) -> None:
-		if context._user_id != CONFIG['admin_userid']:
+		if context._user_id not in CONFIG['admins']:
 			return
 
 		self.save_all_data()
@@ -154,8 +163,23 @@ class Bot:
 
 
 	async def user_start(self, update, context) -> None:
+		if update.callback_query is not None:
+			await context.bot.answer_callback_query(update.callback_query.id)
+
 		if context._user_id in self.connected_users:
 			return
+
+		if not await utils.channel_participaiton_check(update, context, channels=CONFIG['required_channels']):
+			keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.channel_participaiton_check, callback_data="user_start")]]
+			for channel in CONFIG['required_channels']:
+				keyboard.insert(0, [InlineKeyboardButton(channel, url=f"t.me/{channel}")])
+
+			keyboard = InlineKeyboardMarkup(keyboard)
+			await context.bot.send_message(context._chat_id,
+										   text=MISC_MESSAGES['channel_participaiton_check'],
+										   reply_markup=keyboard)
+			return
+
 
 		self.connected_users[context._user_id] = BotUser(user_id=context._user_id,
 														 chat_id=context._chat_id,
@@ -163,12 +187,14 @@ class Bot:
 
 		self.connected_users[context._user_id].app_service.start()
 
-		keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.main_menu, callback_data='main_menu')]]
-		keyboard = InlineKeyboardMarkup(keyboard)
+		await self.main_menu(update, context)
 
-		await context.bot.send_message(context._chat_id,
-									   text=MISC_MESSAGES['init_message'],
-									   reply_markup=keyboard)
+		# keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.main_menu, callback_data='main_menu')]]
+		# keyboard = InlineKeyboardMarkup(keyboard)
+
+		# await context.bot.send_message(context._chat_id,
+		# 							   text=MISC_MESSAGES['init_message'],
+		# 							   reply_markup=keyboard)
 
 
 	async def main_menu(self, update, context) -> None:
@@ -183,7 +209,7 @@ class Bot:
 					 [InlineKeyboardButton(BUTTON_NAMINGS.change_config, callback_data='view_config')],
 					[InlineKeyboardButton(BUTTON_NAMINGS.faq, callback_data='faq')]]
 
-		if context._user_id == CONFIG['admin_userid']:
+		if context._user_id in CONFIG['admins']:
 			keyboard.append([InlineKeyboardButton(BUTTON_NAMINGS.admin_panel, callback_data='admin_panel')])
 
 		keyboard = InlineKeyboardMarkup(keyboard)
@@ -446,7 +472,8 @@ def main():
 	print(f'{clr.green}Starting bot...')
 	bot = Bot()
 
-	bot.load_tg_sessions()
+	if not ONLY_BOT:
+		bot.load_tg_sessions()
 
 	application = Application.builder().token(CONFIG['bot_token']).read_timeout(7).get_updates_read_timeout(42).build()
 
@@ -466,6 +493,7 @@ def main():
 			bot.delete_account   : "delete_account",
 			bot.view_config      : "view_config",
 			bot.edit_config      : "edit_config",
+			bot.user_start       : "user_start",
 	}
 
 	for function, pattern in callback_handlers.items():
@@ -474,7 +502,9 @@ def main():
 	print(f'{clr.cyan}Bot is online{clr.yellow}')
 
 	application.run_polling()
-	bot.save_all_data()
+
+	if not ONLY_BOT:
+		bot.save_all_data()
 
 
 if __name__ == '__main__':

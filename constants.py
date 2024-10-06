@@ -1,6 +1,13 @@
 """
 Bot constants
 """
+import sys
+
+
+DEBUG = '--debug' in sys.argv
+ONLY_BOT = '--only-bot' in sys.argv
+if DEBUG:
+	print('running in debug mode')
 
 CONFIG_FNAME = 'config.json'
 TG_SESSIONS_DIR = 'sessions/'
@@ -37,6 +44,7 @@ class BUTTON_NAMINGS:
 	change_config               = "Change config"
 	disable_app                 = "Disable"
 	enable_app                  = "Enable"
+	channel_participaiton_check = "Check"
 
 
 MISC_MESSAGES = {
@@ -45,7 +53,7 @@ MISC_MESSAGES = {
 	"session_name":"Enter session name (not more than 12 chars):",
 	"wrong_session_name":"Wrong session name or session with exaclty the same name already exists",
 	"incorrect_phone_format":"Invalid phone number",
-	"enquire_auth_data":"Enter your auth data in format: <b>PhoneNumber</b> <b>[Password (optional)]</b>\nExample:\n12356358799 password",
+	"enquire_auth_data":"Enter your phone number:",
 	"enquire_auth_code":"Enter the code you recieved for login",
 	"failed_to_authorize":"Failed to authorize, perhaps incorrect credentials",
 	"authorized_successfully":"Successfully authorized your account, it can be managed in <b>My accounts</b> section",
@@ -57,6 +65,7 @@ MISC_MESSAGES = {
 	"choose_login_option":"Choose login option:",
 	"change_param":"Choose parameter to be changed:",
 	"invalid_value":"Invalid value",
-	"change_param_succeeded":"Parameter was changed successfully"
+	"change_param_succeeded":"Parameter was changed successfully",
+	"channel_participaiton_check":"To continue, please join all following channels"
 }
 

@@ -36,16 +36,14 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 		return
 
 	state, session_name = user.current_state.split(' ')[1:]
-	client = user.tg_sessions[session_name]['client']
+	session = user.tg_sessions[session_name]
 	user.current_state = None
 
 	if state == 'enquire_auth_data':
 		auth_data = update.message.text.split(' ')
 		await update.message.delete()
 
-		phone, password = auth_data[0], None
-		if len(auth_data) > 1:
-			password = auth_data[1]
+		phone = auth_data[0]
 
 		if not phone.isnumeric():
 			await context.bot.send_message(user.chat_id,
@@ -54,28 +52,24 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 			del user.tg_sessions[session_name]
 			return
 
-		result = await client.sign_in(phone=phone)
-		user.tg_sessions[session_name]['phone'] = phone
-		user.tg_sessions[session_name]['password'] = password
-		user.tg_sessions[session_name]['phone_code_hash'] = result.phone_code_hash
+		result = await session['client'].sign_in(phone=phone)
+		session['phone'] = phone
+		session['phone_code_hash'] = result.phone_code_hash
 
 		user.current_state = f"auth_session enquire_auth_code {session_name}"
 		await context.bot.send_message(user.chat_id, text=MISC_MESSAGES['enquire_auth_code'], parse_mode='HTML')
 		return
 
 
+	me = None
 	if state == 'enquire_auth_code':
 		code = update.message.text.replace('-', '')
-		session = user.tg_sessions[session_name]
-		me = None
-
 
 		for i in range(5):
 			try:
-				me = await client.sign_in(phone=session['phone'],
-										  code=code,
-										  phone_code_hash=session['phone_code_hash'],
-										  password=session['password'])
+				me = await session['client'].sign_in(phone=session['phone'],
+													 code=code,
+													 phone_code_hash=session['phone_code_hash'])
 			except telethon.errors.rpcerrorlist.PhoneCodeInvalidError:
 				await context.bot.send_message(user.chat_id,
 											   text=MISC_MESSAGES['invalid_phone_code'],
@@ -83,31 +77,42 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 				del user.tg_sessions[session_name]
 				return
 			except telethon.errors.rpcerrorlist.SessionPasswordNeededError:
-				me = await client.sign_in(phone=session['phone'],
-										  password=session['password'],
-										  phone_code_hash=session['phone_code_hash'])
+				user.current_state = f'auth_session enquire_2fa_password {session_name}'
+				await context.bot.send_message(user.chat_id,
+											   text=MISC_MESSAGES['login_password_required'])
+				return
 			except Exception:
 				continue
 
 			if me is not None:
 				break
 
-		if me is None:
-			await context.bot.send_message(user.chat_id,
-											   text=MISC_MESSAGES['failed_to_authorize'],
-											   reply_markup=utils.main_menu_keyboard())
-			del user.tg_sessions[session_name]
-			return
+	if state == 'enquire_2fa_password':
+		password = update.message.text
+		await update.message.delete()
+		try:
+			me = await session['client'].sign_in(phone=session['phone'],
+									  password=password,
+									  phone_code_hash=session['phone_code_hash'])
+		except:
+			me = None
 
-		client.disconnect()
-
-		user.tg_sessions[session_name] = {'user_id':me.id}
-		user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
-
+	if me is None:
 		await context.bot.send_message(user.chat_id,
-									   text=MISC_MESSAGES['authorized_successfully'],
-									   parse_mode="HTML",
-									   reply_markup=utils.main_menu_keyboard())
+										   text=MISC_MESSAGES['failed_to_authorize'],
+										   reply_markup=utils.main_menu_keyboard())
+		del user.tg_sessions[session_name]
+		return
+
+	session['client'].disconnect()
+
+	user.tg_sessions[session_name] = {'user_id':me.id}
+	user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
+
+	await context.bot.send_message(user.chat_id,
+								   text=MISC_MESSAGES['authorized_successfully'],
+								   parse_mode="HTML",
+								   reply_markup=utils.main_menu_keyboard())
 
 
 async def auth_with_qrcode(update, context, user, session_name:str='') -> None:

@@ -10,6 +10,7 @@ import threading
 
 import utils
 from apps import simpletap
+from app_logger import Logger
 from tg_api import init_client
 
 
@@ -27,7 +28,7 @@ class AppsService(threading.Thread):
 		self.config = config
 
 		self.update_queue = queue.Queue()
-		# self.status_queue = queue.Queue()
+		self.logger = Logger()
 		self.applications = {}
 		self.application_initializers = {'simpletap':simpletap.simpletap_init}
 		self.applications_updaters = {'simpletap':simpletap.simpletap_update}
@@ -79,6 +80,8 @@ class AppsService(threading.Thread):
 				if not await client.is_user_authorized():
 					await client.disconnect()
 					return
+
+				await client.get_me()
 
 				self.clients[request['data']['name']] = client
 				self.applications[request['data']['name']] = {}

@@ -7,13 +7,15 @@ import urllib
 import requests
 import datetime
 
+
+from app_logger import AppLogger
 from telethon import TelegramClient
 from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelRequest
 
 
 # CONFIG = utils.load_config()['apps']['simpletap']
 
-
+COMPLETE_1WIN_TOKEN = False
 HTTP_MAX_RETRY = 5 # amount of http request retries
 BOT_NAME = 'Simple_Tap_Bot'
 APP_URL = 'https://simpletap.app/'
@@ -34,6 +36,7 @@ class SimpleTap:
 		self.session = requests.Session()
 		self.url_update_timer = datetime.datetime.now()
 
+		self.logger = AppLogger(self.name)
 		self.status = None
 		self.warning = None
 
@@ -85,14 +88,20 @@ class SimpleTap:
 		return {block['mineId']:block for block in self.make_post_request('get-mining-blocks')['data']['mines']}
 
 
+	def get_task_list(self) -> dict:
+		""" Returns task list """
+
+		payload = {"lang":"en", "platform":2}
+		return self.make_post_request('get-task-list-2', payload=payload)['data']
+
+
 	def _tap_coins(self, user_data:dict) -> None:
 		""" Make availible taps """
 
 		if user_data['availableTaps'] > 10:
 			self.make_post_request('tap', {'count':user_data['availableTaps']})
 
-			if '--debug' in sys.argv:
-				print(f"Made {user_data['availableTaps']} taps")
+			self.logger.log_app(self.user_id, f"Made {user_data['availableTaps']} taps")
 
 
 	def _farm_coins(self, user_data:dict) -> None:
@@ -125,6 +134,7 @@ class SimpleTap:
 
 		def __buy_mining(name, force='') -> bool:
 			global blocks
+			blocks = self.get_mining_blocks()
 
 			if blocks[name]['dependencyMineId'] is not None:
 				while blocks[name]['dependencyMineLevel'] > blocks[blocks[name]['dependencyMineId']]['currentLevel']:
@@ -134,17 +144,19 @@ class SimpleTap:
 			if blocks[name]['nextPrice'] > self.fetch_user_data()['balance']:
 				return False
 
-			string = f'Upgrading {blocks[name]["mineId"]} to level {blocks[name]["currentLevel"] + 1}'
+			try:
+				self.make_post_request('buy-mining-block', payload={"mineId":blocks[name]['mineId'], "level":blocks[name]['currentLevel'] + 1})
+			except AssertionError as e:
+				self.logger.log_app(self.user_id, e)
 
-			if '--debug' in sys.argv:
-				if force:
-					print(f'{string} (required by {force})')
-				else:
-					print(string)
+			string = f'Upgraded {blocks[name]["mineId"]} to level {blocks[name]["currentLevel"] + 1}'
+			if force:
+				self.logger.log_app(self.user_id, f"{string} (required by {force})")
+			else:
+				self.logger.log_app(self.user_id, string)
 
-			self.make_post_request('buy-mining-block', payload={"mineId":blocks[name]['mineId'], "level":blocks[name]['currentLevel'] + 1})
-			blocks = self.get_mining_blocks()
 			return True
+
 
 		for name in list(blocks.keys()):
 			if blocks[name]['currentLevel'] < self.config['max_cards_level']:
@@ -154,7 +166,7 @@ class SimpleTap:
 	def _complete_tasks(self) -> None:
 		""" Complete inessential tasks, which does not require any effort """
 
-		tasks = [task for task in self.make_post_request('get-task-list-2')['data']['social'] if not task['isRequire'] and task['status'] < 3]
+		tasks = [task for task in self.get_task_list()['social'] if not task['isRequire'] and task['status'] < 3]
 
 		# _easy_url_patterns = ['apps.apple.com', 'bit.ly', 'tiktok.com', 'linkedin.com', 'instagram.com', 'twitter.com', 'x.com']
 		# print(tasks)
@@ -213,14 +225,15 @@ class SimpleTap:
 
 			time.sleep(1)
 
+		# self.logger.log_app(self.user_id, result.text)
 		assert result.status_code in {200, 201}, _error_message + f'\n{result.status_code}: {result.text} {result.request}'
-		assert result.json()['result'] == 'OK', _error_message
+		assert result.json()['result'] == 'OK', _error_message + f'\n{result.json()}'
 		return result.json()
 
 
 
 def get_essnsial_tasks(class_instance:SimpleTap):
-	return [i for i in class_instance.make_post_request('get-task-list-2')['data']['social'] if i['isRequire'] and i['status'] < 3]
+	return [i for i in class_instance.get_task_list()['social'] if i['isRequire'] and i['status'] in {1, 2, 0}]
 
 
 async def token1win_(client:TelegramClient, class_instance:SimpleTap):
@@ -231,11 +244,11 @@ async def token1win_(client:TelegramClient, class_instance:SimpleTap):
 						app_url='https://cryptocklicker-frontend-rnd-prod.100hp.app/',
 						)
 
-	if '--debug' in sys.argv:
-		print(app_url)
+	# if '--debug' in sys.argv:
+	# 	print(app_url)
 
-		if requests.get(app_url).status_code != 200:
-			print('WARNING: token1win error: status code is not 200')
+	if requests.get(app_url).status_code != 200:
+		class_instance.logger.log_app(class_instance.user_id, f"WARNING: token1win error: status code is not 200", False)
 
 
 
@@ -257,7 +270,7 @@ async def complete_essential_tasks(client:TelegramClient, class_instance:SimpleT
 
 			class_instance.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
 
-			if 'token1win_bot' in task['url']:
+			if COMPLETE_1WIN_TOKEN and 'token1win_bot' in task['url']:
 				await token1win_(client, class_instance)
 
 			# message = f'Go to {task['url']} and run the application to complete one of the manual essential tasks'
@@ -268,12 +281,7 @@ async def complete_essential_tasks(client:TelegramClient, class_instance:SimpleT
 	while len(get_essnsial_tasks(class_instance)) > 0 and attemts > 0:
 		class_instance.warning = 'Smth wrong with essential tasks completion, try to run token1win_bot (that is one of the problematic tasks)'
 		await __complete()
-
-	# else:
-	# 	print(message)
-	# 	input('Print [Y] if you are done -> ')
-
-	# return tasks
+		attemts -= 1
 
 
 async def get_simpletap_url(client:TelegramClient) -> str:
@@ -290,16 +298,18 @@ async def simpletap_init(client:TelegramClient, config) -> SimpleTap:
 async def simpletap_update(app:SimpleTap, client:TelegramClient) -> None:
 
 	try:
-		if len(get_essnsial_tasks(app)) > 0:
-			if app.status is None:
-				app.status = 'completing essential tasks'
+		try:
+			if len(get_essnsial_tasks(app)) > 0:
+				if app.status is None:
+					app.status = 'completing essential tasks'
 
-			await complete_essential_tasks(client, app)
-			return
+				await complete_essential_tasks(client, app)
+		except:
+			pass
 
 		if (datetime.datetime.now() - app.url_update_timer) > UPDATE_URL_TIMEOUT:
 			if '--debug' in sys.argv:
-				print('updating url')
+				app.logger.log_app(app.user_id, f"updating url")
 			app.url_update_timer = datetime.datetime.now()
 			app.update_base_url(new_url = await get_simpletap_url(client))
 
@@ -308,7 +318,7 @@ async def simpletap_update(app:SimpleTap, client:TelegramClient) -> None:
 		app.status = None
 		app.warning = None
 	except Exception as e:
-		# print(e)
-		app.status = 'error'
+		app.logger.log_app(app.user_id, str(e))
+		app.status = 'warning'
 		app.warning = e
 
