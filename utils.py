@@ -23,7 +23,7 @@ from constants import (
 def load_config(fname:str = CONFIG_FNAME) -> str:
 	""" Load applcation config """
 
-	with open(fname, 'r') as f:
+	with open(fname, 'r', encoding='utf-8') as f:
 		return json.load(f)
 
 
@@ -43,7 +43,7 @@ def save_users(users:dict) -> None:
 
 	out = {user_id: user.to_json() for user_id, user in users.items()}
 
-	with open(fname, 'w') as f:
+	with open(fname, 'w', encoding='utf-8') as f:
 		json.dump(out, f, indent=4)
 
 
@@ -53,7 +53,7 @@ def load_users(instance) -> dict:
 	if not os.path.exists(fname):
 		return {}
 
-	with open(fname, 'r') as f:
+	with open(fname, 'r', encoding='utf-8') as f:
 		users = json.load(f)
 
 	return {int(user_id): instance(**data) for user_id, data in users.items()}

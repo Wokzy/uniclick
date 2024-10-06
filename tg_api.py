@@ -25,18 +25,20 @@ async def init_client(session_name='test') -> telethon.TelegramClient:
 	return client
 
 
-async def auth_session(update, context, user, session_name:str = '') -> None:
+async def auth_session(update, context, user) -> None:
 	""" Auth telegram account and save it as user tg_session"""
 
+	if update.callback_query is not None:
+		await context.bot.answer_callback_query(update.callback_query.id)
+
 	if user.current_state is None:
-		user.current_state = f'auth_session enquire_auth_data {session_name}'
+		user.current_state = f'auth_session enquire_auth_data 0'
 		await context.bot.send_message(user.chat_id,
 									   text=MISC_MESSAGES['enquire_auth_data'],
 									   parse_mode='HTML')
 		return
 
-	state, session_name = user.current_state.split(' ')[1:]
-	session = user.tg_sessions[session_name]
+	state, phone = user.current_state.split(' ')[1:]
 	user.current_state = None
 
 	if state == 'enquire_auth_data':
@@ -49,19 +51,21 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 			await context.bot.send_message(user.chat_id,
 										   text=MISC_MESSAGES['incorrect_phone_format'],
 										   reply_markup=utils.main_menu_keyboard())
-			del user.tg_sessions[session_name]
 			return
 
-		result = await session['client'].sign_in(phone=phone)
-		session['phone'] = phone
-		session['phone_code_hash'] = result.phone_code_hash
+		user.tg_sessions[phone] = {'client':await init_client(os.path.join(user.sessions_dir, phone))}
 
-		user.current_state = f"auth_session enquire_auth_code {session_name}"
+		result = await user.tg_sessions[phone]['client'].sign_in(phone=phone)
+		user.tg_sessions[phone]['phone'] = phone
+		user.tg_sessions[phone]['phone_code_hash'] = result.phone_code_hash
+
+		user.current_state = f"auth_session enquire_auth_code {phone}"
 		await context.bot.send_message(user.chat_id, text=MISC_MESSAGES['enquire_auth_code'], parse_mode='HTML')
 		return
 
-
+	session = user.tg_sessions[phone]
 	me = None
+
 	if state == 'enquire_auth_code':
 		code = update.message.text.replace('-', '')
 
@@ -74,10 +78,10 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 				await context.bot.send_message(user.chat_id,
 											   text=MISC_MESSAGES['invalid_phone_code'],
 											   reply_markup=utils.main_menu_keyboard())
-				del user.tg_sessions[session_name]
+				del user.tg_sessions[phone]
 				return
 			except telethon.errors.rpcerrorlist.SessionPasswordNeededError:
-				user.current_state = f'auth_session enquire_2fa_password {session_name}'
+				user.current_state = f'auth_session enquire_2fa_password {phone}'
 				await context.bot.send_message(user.chat_id,
 											   text=MISC_MESSAGES['login_password_required'])
 				return
@@ -101,13 +105,13 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 		await context.bot.send_message(user.chat_id,
 										   text=MISC_MESSAGES['failed_to_authorize'],
 										   reply_markup=utils.main_menu_keyboard())
-		del user.tg_sessions[session_name]
+		del user.tg_sessions[phone]
 		return
 
 	session['client'].disconnect()
 
-	user.tg_sessions[session_name] = {'user_id':me.id}
-	user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
+	user.tg_sessions[phone] = {'user_id':me.id}
+	user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, phone), 'name':phone}})
 
 	await context.bot.send_message(user.chat_id,
 								   text=MISC_MESSAGES['authorized_successfully'],
@@ -115,68 +119,68 @@ async def auth_session(update, context, user, session_name:str = '') -> None:
 								   reply_markup=utils.main_menu_keyboard())
 
 
-async def auth_with_qrcode(update, context, user, session_name:str='') -> None:
-	""" Login with qrcode """
+# async def auth_with_qrcode(update, context, user, session_name:str='') -> None:
+# 	""" Login with qrcode """
 
-	if user.current_state == None:
-		client = user.tg_sessions[session_name]['client']
+# 	if user.current_state == None:
+# 		client = user.tg_sessions[session_name]['client']
 
-		qr_login = await client.qr_login()
-		img = qrcode.make(qr_login.url)
+# 		qr_login = await client.qr_login()
+# 		img = qrcode.make(qr_login.url)
 
-		byte_buffer = io.BytesIO()
-		img.save(byte_buffer)
+# 		byte_buffer = io.BytesIO()
+# 		img.save(byte_buffer)
 
-		await context.bot.send_photo(user.chat_id, photo=byte_buffer.getvalue())
+# 		await context.bot.send_photo(user.chat_id, photo=byte_buffer.getvalue())
 
-		try:
-			await qr_login.wait(timeout=5.0)
-		except telethon.errors.rpcerrorlist.SessionPasswordNeededError:
-			await context.bot.send_message(user.chat_id, text=MISC_MESSAGES['login_password_required'])
-			user.current_state = f'auth_with_qrcode {session_name}'
-			return
-		except asyncio.TimeoutError:
-			await context.bot.send_message(user.chat_id, text="The time to login is up, please try again and be quicker")
-			return
+# 		try:
+# 			await qr_login.wait(timeout=5.0)
+# 		except telethon.errors.rpcerrorlist.SessionPasswordNeededError:
+# 			await context.bot.send_message(user.chat_id, text=MISC_MESSAGES['login_password_required'])
+# 			user.current_state = f'auth_with_qrcode {session_name}'
+# 			return
+# 		except asyncio.TimeoutError:
+# 			await context.bot.send_message(user.chat_id, text="The time to login is up, please try again and be quicker")
+# 			return
 
-		me = await client.get_me()
-		client.disconnect()
+# 		me = await client.get_me()
+# 		client.disconnect()
 
-		user.tg_sessions[session_name] = {'user_id':me.id}
-		user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
+# 		user.tg_sessions[session_name] = {'user_id':me.id}
+# 		user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
 
-		await context.bot.send_message(user.chat_id,
-									   text=MISC_MESSAGES['authorized_successfully'],
-									   parse_mode="HTML",
-									   reply_markup=utils.main_menu_keyboard())
+# 		await context.bot.send_message(user.chat_id,
+# 									   text=MISC_MESSAGES['authorized_successfully'],
+# 									   parse_mode="HTML",
+# 									   reply_markup=utils.main_menu_keyboard())
 
-		return
+# 		return
 
-	session_name = user.current_state.split(' ')[1]
-	password = update.message.text
+# 	session_name = user.current_state.split(' ')[1]
+# 	password = update.message.text
 
-	await update.message.delete()
+# 	await update.message.delete()
 
-	client = user.tg_sessions[session_name]['client']
+# 	client = user.tg_sessions[session_name]['client']
 
-	for i in range(5):
-		try:
-			me = await client.sign_in(password=password)
-		except:
-			continue
+# 	for i in range(5):
+# 		try:
+# 			me = await client.sign_in(password=password)
+# 		except:
+# 			continue
 
-	client.disconnect()
-	if me is None:
-		await context.bot.send_message(user.chat_id,
-										   text=MISC_MESSAGES['failed_to_authorize'],
-										   reply_markup=utils.main_menu_keyboard())
-		del user.tg_sessions[session_name]
-		return
+# 	client.disconnect()
+# 	if me is None:
+# 		await context.bot.send_message(user.chat_id,
+# 										   text=MISC_MESSAGES['failed_to_authorize'],
+# 										   reply_markup=utils.main_menu_keyboard())
+# 		del user.tg_sessions[session_name]
+# 		return
 
-	user.tg_sessions[session_name] = {'user_id':me.id}
-	user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
+# 	user.tg_sessions[session_name] = {'user_id':me.id}
+# 	user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, session_name), 'name':session_name}})
 
-	await context.bot.send_message(user.chat_id,
-								   text=MISC_MESSAGES['authorized_successfully'],
-								   parse_mode="HTML",
-								   reply_markup=utils.main_menu_keyboard())
+# 	await context.bot.send_message(user.chat_id,
+# 								   text=MISC_MESSAGES['authorized_successfully'],
+# 								   parse_mode="HTML",
+# 								   reply_markup=utils.main_menu_keyboard())

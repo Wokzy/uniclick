@@ -29,7 +29,6 @@ import tg_api
 from apps.apps_init import AppsService
 from constants import (
 	clr,
-	DEBUG,
 	ONLY_BOT,
 	MISC_MESSAGES,
 	BUTTON_NAMINGS,
@@ -95,7 +94,7 @@ class Bot:
 									 'edit_config':self.edit_config
 									 }
 		self._external_state_methods = {'auth_session':tg_api.auth_session,
-										'auth_with_qrcode':tg_api.auth_with_qrcode
+										#'auth_with_qrcode':tg_api.auth_with_qrcode
 										}
 
 
@@ -228,51 +227,9 @@ class Bot:
 
 
 	async def add_account(self, update, context) -> None:
-		user = self.connected_users[context._user_id]
+		"""Call auth_session method"""
 
-		if user.current_state is None and update.callback_query is not None:
-			callback_data = update.callback_query.data.split(' ')[1::]
-
-			await context.bot.answer_callback_query(update.callback_query.id)
-			if len(callback_data) == 0:
-				await update.callback_query.edit_message_text(text=MISC_MESSAGES['session_name'])
-
-				user.current_state = 'add_account session_name'
-			else:
-				session_name = callback_data[1]
-				client = await tg_api.init_client(os.path.join(user.sessions_dir, session_name))
-				user.tg_sessions[session_name] = {'client':client}
-
-				if callback_data[0] == 'default_login':
-					await tg_api.auth_session(update, context, user, session_name=session_name)
-				elif callback_data[0] == 'qr_login':
-					await tg_api.auth_with_qrcode(update, context, user, session_name=session_name)
-
-			self.save_all_data()
-			return
-
-		data = user.current_state.split(' ')[1::]
-		user.current_state = None
-
-		if data[0] == 'session_name':
-			session_name = update.message.text[:12]
-
-			if ' ' in session_name or session_name in user.tg_sessions.keys():
-				keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu'),
-							 InlineKeyboardButton(BUTTON_NAMINGS.try_again, callback_data='add_account')]]
-				keyboard = InlineKeyboardMarkup(keyboard)
-
-				await context.bot.send_message(user.chat_id, text=MISC_MESSAGES['wrong_session_name'], reply_markup=keyboard)
-				return
-
-			keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')],
-						[InlineKeyboardButton(BUTTON_NAMINGS.default_login, callback_data=f'add_account default_login {session_name}'),]]
-						 #InlineKeyboardButton(BUTTON_NAMINGS.qr_login, callback_data=f'add_account qr_login {session_name}')]]
-			keyboard = InlineKeyboardMarkup(keyboard)
-
-			await context.bot.send_message(user.chat_id,
-										   text=MISC_MESSAGES['choose_login_option'],
-										   reply_markup=keyboard)
+		await tg_api.auth_session(update, context, user=self.connected_users[context._user_id])
 
 
 	async def my_accounts(self, update, context) -> None:
