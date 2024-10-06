@@ -29,9 +29,9 @@ import tg_api
 from apps.apps_init import AppsService
 from constants import (
 	clr,
+	LOCALES,
 	ONLY_BOT,
-	MISC_MESSAGES,
-	BUTTON_NAMINGS,
+	DEFAULT_LOCALE,
 	TG_SESSIONS_DIR,
 )
 
@@ -41,8 +41,8 @@ CONFIG = utils.load_config()
 
 
 class BotUser:
-	def __init__(self, user_id:int = 0, chat_id:int = 0,
-				 tg_sessions:dict = {}, current_config:dict = {}, customer_data:dict = {}):
+	def __init__(self, user_id:int = 0, chat_id:int = 0, tg_sessions:dict = {},
+				 current_config:dict = {}, customer_data:dict = {}, locale:str = "eng"):
 		""" 
 		Tg sessions are filenames of current sesisons
 		tg_sessions : {session_name:telethon.TelegramCliett}
@@ -52,6 +52,8 @@ class BotUser:
 		self.user_id = user_id
 		self.chat_id = chat_id
 
+		self.locale = locale
+		self.locale_module = LOCALES[locale]['module']
 		self.customer_data = copy.deepcopy(customer_data)
 
 		self.current_state = None
@@ -78,6 +80,8 @@ class BotUser:
 			"chat_id":self.chat_id,
 			"tg_sessions":sessions,
 			"current_config":self.current_config,
+			"customer_data":self.customer_data,
+			"locale":self.locale
 		}
 
 
@@ -140,7 +144,7 @@ class Bot:
 		for user in self.connected_users.values():
 			user.app_service.stop()
 
-		await context.bot.send_message(context._chat_id, text=MISC_MESSAGES['graceful_stop'])
+		await context.bot.send_message(context._chat_id, text=DEFAULT_LOCALE.MISC_MESSAGES['graceful_stop'])
 
 
 	async def handle_message(self, update, context) -> None:
@@ -162,26 +166,41 @@ class Bot:
 
 
 	async def user_start(self, update, context) -> None:
+
+		state = 'default'
+
 		if update.callback_query is not None:
 			await context.bot.answer_callback_query(update.callback_query.id)
+			state = update.callback_query.data.split(' ')[1]
 
 		if context._user_id in self.connected_users:
 			return
 
+		if state == 'default':
+			keyboard = [[InlineKeyboardButton(LOCALES[lc]['button'], callback_data=f'user_start {lc}')] for lc in LOCALES.keys()]
+			keyboard = InlineKeyboardMarkup(keyboard)
+			await context.bot.send_message(context._chat_id,
+										   text="Select the bot language: ",
+										   reply_markup=keyboard)
+			return
+		else:
+			locale_module = LOCALES[state]['module']
+
 		if not await utils.channel_participaiton_check(update, context, channels=CONFIG['required_channels']):
-			keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.channel_participaiton_check, callback_data="user_start")]]
+			keyboard = [[InlineKeyboardButton(locale_module.BUTTON_NAMINGS.channel_participaiton_check, callback_data=f"user_start {state}")]]
 			for channel in CONFIG['required_channels']:
 				keyboard.insert(0, [InlineKeyboardButton(channel, url=f"t.me/{channel}")])
 
 			keyboard = InlineKeyboardMarkup(keyboard)
 			await context.bot.send_message(context._chat_id,
-										   text=MISC_MESSAGES['channel_participaiton_check'],
+										   text=locale_module.MISC_MESSAGES['channel_participaiton_check'],
 										   reply_markup=keyboard)
 			return
 
 
 		self.connected_users[context._user_id] = BotUser(user_id=context._user_id,
 														 chat_id=context._chat_id,
+														 locale=state,
 														 current_config=CONFIG['default_user_config'])
 
 		self.connected_users[context._user_id].app_service.start()
@@ -203,13 +222,13 @@ class Bot:
 		user = self.connected_users[context._user_id]
 		user.current_state = None
 
-		keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.my_accounts, callback_data='my_accounts'),
-					 InlineKeyboardButton(BUTTON_NAMINGS.add_account, callback_data='add_account')],
-					 [InlineKeyboardButton(BUTTON_NAMINGS.change_config, callback_data='view_config')],
-					[InlineKeyboardButton(BUTTON_NAMINGS.faq, callback_data='faq')]]
+		keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.my_accounts, callback_data='my_accounts'),
+					 InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.add_account, callback_data='add_account')],
+					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.change_config, callback_data='view_config')],
+					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.faq, callback_data='faq')]]
 
 		if context._user_id in CONFIG['admins']:
-			keyboard.append([InlineKeyboardButton(BUTTON_NAMINGS.admin_panel, callback_data='admin_panel')])
+			keyboard.append([InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.admin_panel, callback_data='admin_panel')])
 
 		keyboard = InlineKeyboardMarkup(keyboard)
 
@@ -217,12 +236,12 @@ class Bot:
 			await context.bot.answer_callback_query(update.callback_query.id)
 
 			if update.callback_query.message.text is not None:
-				await update.callback_query.edit_message_text(text=MISC_MESSAGES['main_menu'],
+				await update.callback_query.edit_message_text(text=user.locale_module.MISC_MESSAGES['main_menu'],
 															  reply_markup=keyboard)
 				return
 
 		await context.bot.send_message(user.chat_id,
-									   text=MISC_MESSAGES['main_menu'],
+									   text=user.locale_module.MISC_MESSAGES['main_menu'],
 									   reply_markup=keyboard)
 
 
@@ -238,10 +257,14 @@ class Bot:
 		await context.bot.answer_callback_query(update.callback_query.id)
 
 		text = 'Choose an account from list:'
-		keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]]
+		keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]]
 
 		_rm_list = []
 		for name in user.tg_sessions.keys():
+			if not user.tg_sessions[name].get('finished', False):
+				_rm_list.append(name)
+				continue
+
 			if name not in user.app_service.clients.keys():
 				print(user.app_service.clients.keys())
 				if user.app_service.update_queue.empty():
@@ -289,8 +312,8 @@ class Bot:
 
 			text += app_text.format(name, _status_text, _warning_text)
 
-		keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.go_back, callback_data='my_accounts')],
-					[InlineKeyboardButton(BUTTON_NAMINGS.delete_account, callback_data=f'delete_account default {session_name}')]]
+		keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.go_back, callback_data='my_accounts')],
+					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.delete_account, callback_data=f'delete_account default {session_name}')]]
 		keyboard = InlineKeyboardMarkup(keyboard)
 
 		if not text:
@@ -308,12 +331,12 @@ class Bot:
 		if state == 'default':
 			await context.bot.answer_callback_query(update.callback_query.id)
 
-			keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.go_back, callback_data='my_accounts'),
-						 InlineKeyboardButton(BUTTON_NAMINGS.confirm_account_deletion, callback_data=f'delete_account confirm {name}')]]
+			keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.go_back, callback_data='my_accounts'),
+						 InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.confirm_account_deletion, callback_data=f'delete_account confirm {name}')]]
 			keyboard = InlineKeyboardMarkup(keyboard)
 
 			await context.bot.send_message(user.chat_id,
-										   text=MISC_MESSAGES['confirm_account_deletion'].format(name),
+										   text=user.locale_module.MISC_MESSAGES['confirm_account_deletion'].format(name),
 										   reply_markup=keyboard)
 			return
 
@@ -337,7 +360,7 @@ class Bot:
 
 		if len(data) == 1:
 
-			keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]]
+			keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]]
 			for app_name in user.current_config.keys():
 				keyboard.append([InlineKeyboardButton(app_name, callback_data=f'view_config {app_name}')])
 
@@ -352,13 +375,13 @@ class Bot:
 				if param != '__field_types':
 					text += f'\n{param}: {value}'
 
-			keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')],
-						[InlineKeyboardButton(BUTTON_NAMINGS.change_config, callback_data=f'edit_config default {app_name}')]]
+			keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')],
+						[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.change_config, callback_data=f'edit_config default {app_name}')]]
 
 			if user.current_config[app_name]["enabled"]:
-				_button_name = BUTTON_NAMINGS.disable_app
+				_button_name = user.locale_module.BUTTON_NAMINGS.disable_app
 			else:
-				_button_name = BUTTON_NAMINGS.enable_app
+				_button_name = user.locale_module.BUTTON_NAMINGS.enable_app
 
 			keyboard.append([InlineKeyboardButton(_button_name, callback_data=f'edit_config toggle {app_name}')])
 			keyboard = InlineKeyboardMarkup(keyboard)
@@ -382,7 +405,7 @@ class Bot:
 				_apply_config()
 				await update.callback_query.edit_message_text(text='Success!', reply_markup=utils.main_menu_keyboard())
 			elif data[0] == 'default':
-				keyboard = [[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]]
+				keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]]
 				for param, value in user.current_config[data[1]].items():
 					if param not in {'enabled', '__field_types'}:
 						keyboard.append([InlineKeyboardButton(param, callback_data=f'edit_config change_param {data[1]} {param}')])
@@ -390,7 +413,7 @@ class Bot:
 				keyboard = InlineKeyboardMarkup(keyboard)
 				await update.callback_query.edit_message_text(text=update.callback_query.message.text, reply_markup=keyboard)
 			elif data[0] == 'change_param':
-				await context.bot.send_message(user.chat_id, text=MISC_MESSAGES['change_param'])
+				await context.bot.send_message(user.chat_id, text=user.locale_module.MISC_MESSAGES['change_param'])
 				user.current_state = f'edit_config {data[1]} {data[2]}'
 
 			return
@@ -407,7 +430,7 @@ class Bot:
 
 		if not validate:
 			await context.bot.send_message(user.chat_id,
-										   text=MISC_MESSAGES['invalid_value'],
+										   text=user.locale_module.MISC_MESSAGES['invalid_value'],
 										   reply_markup=utils.main_menu_keyboard())
 			return
 
@@ -415,7 +438,7 @@ class Bot:
 		_apply_config()
 
 		await context.bot.send_message(user.chat_id,
-									   text=MISC_MESSAGES['change_param_succeeded'],
+									   text=user.locale_module.MISC_MESSAGES['change_param_succeeded'],
 									   reply_markup=utils.main_menu_keyboard())
 
 

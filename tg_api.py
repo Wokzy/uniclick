@@ -10,8 +10,6 @@ import telethon
 from constants import (
 	clr,
 	CACHE_DIR,
-	MISC_MESSAGES,
-	BUTTON_NAMINGS,
 	TG_SESSIONS_DIR,
 )
 
@@ -34,8 +32,9 @@ async def auth_session(update, context, user) -> None:
 	if user.current_state is None:
 		user.current_state = f'auth_session enquire_auth_data 0'
 		await context.bot.send_message(user.chat_id,
-									   text=MISC_MESSAGES['enquire_auth_data'],
-									   parse_mode='HTML')
+									   text=user.locale_module.MISC_MESSAGES['enquire_auth_data'],
+									   parse_mode='HTML',
+									   reply_markup=utils.main_menu_keyboard())
 		return
 
 	state, phone = user.current_state.split(' ')[1:]
@@ -49,7 +48,7 @@ async def auth_session(update, context, user) -> None:
 
 		if not phone.isnumeric():
 			await context.bot.send_message(user.chat_id,
-										   text=MISC_MESSAGES['incorrect_phone_format'],
+										   text=user.locale_module.MISC_MESSAGES['incorrect_phone_format'],
 										   reply_markup=utils.main_menu_keyboard())
 			return
 
@@ -60,7 +59,10 @@ async def auth_session(update, context, user) -> None:
 		user.tg_sessions[phone]['phone_code_hash'] = result.phone_code_hash
 
 		user.current_state = f"auth_session enquire_auth_code {phone}"
-		await context.bot.send_message(user.chat_id, text=MISC_MESSAGES['enquire_auth_code'], parse_mode='HTML')
+		await context.bot.send_message(user.chat_id,
+									   text=user.locale_module.MISC_MESSAGES['enquire_auth_code'],
+									   parse_mode='HTML',
+									   reply_markup=utils.main_menu_keyboard())
 		return
 
 	session = user.tg_sessions[phone]
@@ -76,14 +78,15 @@ async def auth_session(update, context, user) -> None:
 													 phone_code_hash=session['phone_code_hash'])
 			except telethon.errors.rpcerrorlist.PhoneCodeInvalidError:
 				await context.bot.send_message(user.chat_id,
-											   text=MISC_MESSAGES['invalid_phone_code'],
+											   text=user.locale_module.MISC_MESSAGES['invalid_phone_code'],
 											   reply_markup=utils.main_menu_keyboard())
 				del user.tg_sessions[phone]
 				return
 			except telethon.errors.rpcerrorlist.SessionPasswordNeededError:
 				user.current_state = f'auth_session enquire_2fa_password {phone}'
 				await context.bot.send_message(user.chat_id,
-											   text=MISC_MESSAGES['login_password_required'])
+											   text=user.locale_module.MISC_MESSAGES['login_password_required'],
+											   reply_markup=utils.main_menu_keyboard())
 				return
 			except Exception:
 				continue
@@ -103,18 +106,18 @@ async def auth_session(update, context, user) -> None:
 
 	if me is None:
 		await context.bot.send_message(user.chat_id,
-										   text=MISC_MESSAGES['failed_to_authorize'],
+										   text=user.locale_module.MISC_MESSAGES['failed_to_authorize'],
 										   reply_markup=utils.main_menu_keyboard())
 		del user.tg_sessions[phone]
 		return
 
 	session['client'].disconnect()
 
-	user.tg_sessions[phone] = {'user_id':me.id}
+	user.tg_sessions[phone] = {'user_id':me.id, 'finished':True}
 	user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, phone), 'name':phone}})
 
 	await context.bot.send_message(user.chat_id,
-								   text=MISC_MESSAGES['authorized_successfully'],
+								   text=user.locale_module.MISC_MESSAGES['authorized_successfully'],
 								   parse_mode="HTML",
 								   reply_markup=utils.main_menu_keyboard())
 

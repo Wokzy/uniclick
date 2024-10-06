@@ -11,12 +11,11 @@ from telethon import TelegramClient
 from telethon.sync import functions
 
 from constants import (
-	CONFIG_FNAME,
 	CACHE_DIR,
-	TG_SESSIONS_DIR,
+	CONFIG_FNAME,
 	USER_DATA_DIR,
-	BUTTON_NAMINGS,
-	MISC_MESSAGES,
+	DEFAULT_LOCALE,
+	TG_SESSIONS_DIR,
 )
 
 
@@ -90,4 +89,4 @@ async def channel_participaiton_check(update, context, channels: list[str], user
 
 def main_menu_keyboard():
 	""" Main menu keyboard alias """
-	return InlineKeyboardMarkup([[InlineKeyboardButton(BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]])
+	return InlineKeyboardMarkup([[InlineKeyboardButton(DEFAULT_LOCALE.BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]])
