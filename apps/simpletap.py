@@ -42,6 +42,8 @@ class SimpleTap:
 
 		self.config = config
 
+		self.inline_report_info = 'fetching balace...'
+
 
 	def get_post_headers(self) -> dict:
 		""" Standart headers for post request"""
@@ -186,6 +188,8 @@ class SimpleTap:
 	def update_all(self):
 		# print('updating all')
 		user_data = self.fetch_user_data()
+
+		self.inline_report_info = f'balance: {user_data["balance"]}'
 
 		self._tap_coins(user_data)
 		self._farm_coins(user_data)

@@ -114,6 +114,8 @@ async def auth_session(update, context, user) -> None:
 	session['client'].disconnect()
 
 	user.tg_sessions[phone] = {'user_id':me.id, 'finished':True}
+	user.current_config[me.user_id] = CONFIG['default_user_config']
+	user.app_service.update_queue.put({'type':'update_config', 'data':user.current_config})
 	user.app_service.update_queue.put({'type':'add_client', 'data':{'path':os.path.join(user.sessions_dir, phone), 'name':phone}})
 
 	await context.bot.send_message(user.chat_id,

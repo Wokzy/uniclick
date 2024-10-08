@@ -325,6 +325,7 @@ class Bot:
 
 	async def my_accounts(self, update, context) -> None:
 		user = self.connected_users[context._user_id]
+		user.current_state = None
 
 		await context.bot.answer_callback_query(update.callback_query.id)
 
@@ -364,11 +365,13 @@ class Bot:
 
 		session_name = update.callback_query.data.split(' ')[1]
 
+		user.current_state = f'manage_session {session_name}'
+
 		statuses = user.app_service.fetch_status()[session_name]
 		text = ''
 
 		for name, status in statuses.items():
-			app_text = '{}\n\tStatus: {}\n\tWarnings:{}'
+			app_text = '{}\n\tStatus: {}\n\tWarnings:{}\n\t{}'
 
 			if status['status'] is None:
 				_status_text = 'active 🟢'
@@ -382,7 +385,10 @@ class Bot:
 			else:
 				_warning_text = f'{status["warning"]} 🟡'
 
-			text += app_text.format(name, _status_text, _warning_text)
+			text += app_text.format(name,
+									_status_text,
+									_warning_text,
+									user.app_service.applications[session_name][name].inline_report_info)
 
 		keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.go_back, callback_data='my_accounts')],
 					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.delete_account, callback_data=f'delete_account default {session_name}')]]
@@ -522,13 +528,31 @@ class Bot:
 		""" Inline query handler for config changing """
 		query = update.inline_query.query
 
-		result = [
-			InlineQueryResultCachedPhoto(id=str(uuid.uuid4()),
-										 photo_file_id= await utils.get_app_photo(context.bot, update.inline_query.from_user.id, name),
-										 title=name,
-										 input_message_content=InputTextMessageContent(name))
-			for name, chat_id in SUPPORTED_APPLICATIONS.items()
-		]
+		user = self.connected_users[update.inline_query.from_user.id]
+		if user.current_state is None or not user.current_state.startswith('manage_session'):
+			result = [
+				InlineQueryResultArticle(id=str(uuid.uuid4()),
+										 title='main menu',
+										 input_message_content=InputTextMessageContent('/main_menu'))
+			]
+			await update.inline_query.answer(result)
+			return
+
+		session_name = user.current_state.split(' ')[1]
+
+		result = []
+		for name, chat_id in SUPPORTED_APPLICATIONS.items():
+			# result.append(InlineQueryResultCachedPhoto(id=uuid.uuid4(),
+			# 							 photo_file_id= await utils.get_app_photo(context.bot, user.chat_id, name),
+			# 							 title=name,
+			# 							 description=user.app_service.applications[session_name][name].inline_report_info,
+			# 							 caption=user.app_service.applications[session_name][name].inline_report_info,
+			# 							 input_message_content=InputTextMessageContent('simpletap'),
+			# 							 ))
+			_text = f"{name}\n{user.app_service.applications[session_name][name].inline_report_info}"
+			result.append(InlineQueryResultArticle(id=uuid.uuid4(),
+												   title=_text,
+												   input_message_content=InputTextMessageContent('simpletap')))
 
 		await update.inline_query.answer(result)
 

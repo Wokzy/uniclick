@@ -44,7 +44,7 @@ class AppsService(threading.Thread):
 	def stop(self):
 		self.running = False
 		for client in self.clients.values():
-			client.disconnect()
+			client['client'].disconnect()
 
 
 	async def main(self):
@@ -69,9 +69,17 @@ class AppsService(threading.Thread):
 				break
 			elif request['type'] == 'update_config':
 				self.config = request['data']
+
+				for cl_id in self.config.keys():
+					for cl_name, client in self.clients.items():
+						if client['user_id'] != cl_id:
+							continue
+
+						for app_name, app in self.applications[cl_name].items():
+							app.config = self.config[cl_id][app_name]
 			elif request['type'] == 'remove_client':
-				await self.clients[request['data']].log_out()
-				await self.clients[request['data']].disconnect()
+				await self.clients[request['data']]['client'].log_out()
+				await self.clients[request['data']]['client'].disconnect()
 
 				del self.clients[request['data']]
 				del self.applications[request['data']]
@@ -81,9 +89,9 @@ class AppsService(threading.Thread):
 					await client.disconnect()
 					return
 
-				await client.get_me()
+				user = await client.get_me()
 
-				self.clients[request['data']['name']] = client
+				self.clients[request['data']['name']] = {'client':client, 'user_id':user.id}
 				self.applications[request['data']['name']] = {}
 
 
@@ -98,18 +106,18 @@ class AppsService(threading.Thread):
 		_rm_list = []
 
 		for cl_name, client in self.clients.items():
-			if not client.is_connected():
-				await client.connect()
+			if not client['client'].is_connected():
+				await client['client'].connect()
 
-			if not await client.is_user_authorized():
-				if client.is_connected():
-					await client.disconnect()
+			if not await client['client'].is_user_authorized():
+				if client['client'].is_connected():
+					await client['client'].disconnect()
 				_rm_list.append(cl_name)
 				continue
 
 			for name, method in self.application_initializers.items():
-				if self.config[name]['enabled'] and name not in self.applications[cl_name]:
-					self.applications[cl_name][name] = await method(client, self.config[name])
+				if self.config[cl_name][name]['enabled'] and name not in self.applications[cl_name]:
+					self.applications[cl_name][name] = await method(client['client'], self.config[cl_name][name])
 
 		for cl_name in _rm_list:
 			del self.clients[cl_name]
@@ -119,14 +127,14 @@ class AppsService(threading.Thread):
 		""" Update each application """
 
 		for cl_name, client in self.clients.items():
-			if not client.is_connected():
-				await client.connect()
+			if not client['client'].is_connected():
+				await client['client'].connect()
 
 			_rm_list = []
 
 			for name, method in self.applications_updaters.items():
-				if self.config[name]['enabled']:
-					await method(app=self.applications[cl_name][name], client=client)
+				if self.config[cl_name][name]['enabled']:
+					await method(app=self.applications[cl_name][name], client=client['client'])
 				elif name in self.applications[cl_name]:
 					_rm_list.append(name)
 

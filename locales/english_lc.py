@@ -10,7 +10,7 @@ class BUTTON_NAMINGS:
 	return_to_main_menu         = "Return to main menu"
 	try_again                   = "Try again"
 	delete_account              = "Disconnect account"
-	go_back                     = "go back"
+	go_back                     = "🔙 go back"
 	confirm_account_deletion    = "Yes, im 100/100 sure"
 	default_login               = "VIA Phone number"
 	qr_login                    = "VIA QR CODE"
