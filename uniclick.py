@@ -5,23 +5,29 @@ Uniclick application
 import os
 import sys
 import copy
+import uuid
 import asyncio
 import datetime
 
 from telegram import (
+	helpers,
+	Update,
 	InlineKeyboardButton,
 	InlineKeyboardMarkup,
-	helpers,
+	InputTextMessageContent,
+	InlineQueryResultArticle,
+	InlineQueryResultCachedPhoto,
 )
 
 from telegram.ext import (
-	Application,
-	CommandHandler,
-	ContextTypes,
-	MessageHandler,
-	CallbackQueryHandler,
-	JobQueue,
 	filters,
+	JobQueue,
+	Application,
+	ContextTypes,
+	CommandHandler,
+	MessageHandler,
+	InlineQueryHandler,
+	CallbackQueryHandler,
 )
 
 import utils
@@ -35,10 +41,10 @@ from constants import (
 	DEFAULT_LOCALE,
 	TG_SESSIONS_DIR,
 	DEFAULT_CUSTOMER_DATA,
+	SUPPORTED_APPLICATIONS,
 )
 
 
-# TODO: init clients in dedicated thread
 CONFIG = utils.load_config()
 
 
@@ -512,6 +518,21 @@ class Bot:
 									   reply_markup=utils.main_menu_keyboard())
 
 
+	async def inline_query(self, update, context) -> None:
+		""" Inline query handler for config changing """
+		query = update.inline_query.query
+
+		result = [
+			InlineQueryResultCachedPhoto(id=str(uuid.uuid4()),
+										 photo_file_id= await utils.get_app_photo(context.bot, update.inline_query.from_user.id, name),
+										 title=name,
+										 input_message_content=InputTextMessageContent(name))
+			for name, chat_id in SUPPORTED_APPLICATIONS.items()
+		]
+
+		await update.inline_query.answer(result)
+
+
 
 # 🟢🟡🔺
 
@@ -526,9 +547,12 @@ def main():
 
 	application.add_handler(CommandHandler("start", bot.ref_start, filters.Regex(r"\d+")))
 	application.add_handler(CommandHandler("start", bot.user_start))
+
 	application.add_handler(CommandHandler("main_menu", bot.main_menu))
 	application.add_handler(CommandHandler("save_all", bot.async_save))
 	application.add_handler(CommandHandler("graceful_stop", bot.graceful_stop))
+
+	application.add_handler(InlineQueryHandler(bot.inline_query))
 	application.add_handler(MessageHandler(filters.TEXT, bot.handle_message))
 
 	callback_handlers = {
@@ -550,7 +574,7 @@ def main():
 
 	print(f'{clr.cyan}Bot is online{clr.yellow}')
 
-	application.run_polling()
+	application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 	if not ONLY_BOT:
 		bot.save_all_data()

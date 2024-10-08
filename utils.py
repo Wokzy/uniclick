@@ -1,6 +1,7 @@
 
 import os
 import json
+import copy
 
 from telegram import (
 	InlineKeyboardButton,
@@ -16,7 +17,12 @@ from constants import (
 	USER_DATA_DIR,
 	DEFAULT_LOCALE,
 	TG_SESSIONS_DIR,
+	SUPPORTED_APPLICATIONS,
 )
+
+
+global cached_utils_info
+cached_utils_info = {'app_photos':{}}
 
 
 def load_config(fname:str = CONFIG_FNAME) -> str:
@@ -72,6 +78,48 @@ async def get_base_app_url(client:TelegramClient, bot_name:str, app_url:str, pla
 			start_param=start_param
 		)
 	)).url
+
+
+def save_app_photos(photos: dict[str, str], path: str) -> None:
+	with open(path, 'w') as f:
+		json.dump(photos, f, indent=4)
+
+
+async def load_app_photos(bot, chat_id) -> None:
+	global cached_utils_info
+	_fname = os.path.join(CACHE_DIR, 'app_photos.json')
+
+	if not os.path.exists(_fname):
+		save_app_photos({}, _fname)
+
+	with open(_fname, 'r') as f:
+		data = json.load(f)
+
+	if list(data.keys()) != list(SUPPORTED_APPLICATIONS.keys()):
+		print('prepairing app photos')
+		for name, chat_name in SUPPORTED_APPLICATIONS.items():
+			chat = await bot.get_chat(chat_name)
+			photo_file = await chat.photo.get_big_file()
+			file_path = os.path.join(CACHE_DIR, f'{name}.png')
+
+			await photo_file.download_to_drive(file_path)
+			with open(file_path, 'rb') as f:
+				msg = await bot.send_photo(chat_id, photo=f)
+
+			data[name] = msg.photo[-1].file_id
+
+	cached_utils_info['app_photos'] = copy.deepcopy(data)
+	save_app_photos(data, _fname)
+
+
+async def get_app_photo(bot, chat_id, app_name: str) -> str:
+	global cached_utils_info
+
+	if app_name not in cached_utils_info['app_photos']:
+		await load_app_photos(bot, chat_id)
+
+	return cached_utils_info['app_photos'][app_name]
+
 
 
 async def channel_participaiton_check(update, context, channels: list[str], user_id: int = 0) -> bool:

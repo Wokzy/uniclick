@@ -13,8 +13,11 @@ if DEBUG:
 CONFIG_FNAME = 'config.json'
 TG_SESSIONS_DIR = 'sessions/'
 USER_DATA_DIR = 'user_data/'
-CACHE_DIR = '_chache/'
+CACHE_DIR = '_cache/'
 
+SUPPORTED_APPLICATIONS = {
+		'simpletap':'@smpl_app',
+		}
 
 LOCALES = {'eng':{"module":english_lc, "button":"🇺🇸 English"}}
 DEFAULT_LOCALE = LOCALES['eng']['module']
