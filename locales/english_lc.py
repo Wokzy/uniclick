@@ -15,8 +15,8 @@ class BUTTON_NAMINGS:
 	default_login               = "VIA Phone number"
 	qr_login                    = "VIA QR CODE"
 	change_config               = "Change config"
-	disable_app                 = "Disable"
-	enable_app                  = "Enable"
+	disable_app                 = "✅ Enabled" # better define implementary
+	enable_app                  = "❌ Disabled"
 	channel_participaiton_check = "Check"
 	profile                     = "👤 Profile"
 	invite_friends              =  "👋 Invite friends"

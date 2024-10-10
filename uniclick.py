@@ -108,7 +108,8 @@ class Bot:
 		self.connected_users = utils.load_users(instance=BotUser)
 
 		self._local_state_methods = {'add_account':self.add_account,
-									 'edit_config':self.edit_config
+									 'view_config':self.view_config,
+									 'edit_config':self.edit_config,
 									 }
 		self._external_state_methods = {'auth_session':tg_api.auth_session,
 										#'auth_with_qrcode':tg_api.auth_with_qrcode
@@ -252,8 +253,7 @@ class Bot:
 
 		keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.my_accounts, callback_data='my_accounts'),
 					 InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.add_account, callback_data='add_account')],
-					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.profile, callback_data='profile'),
-					 InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.change_config, callback_data='view_config')],
+					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.profile, callback_data='profile')],
 					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.invite_friends, callback_data='invite_friends')],
 					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.faq, url=CONFIG['faq_post_link'])]]
 
@@ -365,7 +365,7 @@ class Bot:
 
 		session_name = update.callback_query.data.split(' ')[1]
 
-		user.current_state = f'manage_session {session_name}'
+		user.current_state = f'view_config {session_name}'
 
 		statuses = user.app_service.fetch_status()[session_name]
 		text = ''
@@ -433,40 +433,28 @@ class Bot:
 	async def view_config(self, update, context) -> None:
 		""" Shows user his config """
 
-		await context.bot.answer_callback_query(update.callback_query.id)
-		user = self.connected_users[context._user_id]
+		user = self.connected_users[update.message.from_user.id]
+		session_name = user.current_state.split(' ')[1]
+		app_name = update.message.text
 
-		data = update.callback_query.data.split(' ')
 
-		if len(data) == 1:
+		text = f'<b>Enabled</b>: {["No🔺", "Yes🟢"][user.current_config[session_name][app_name]["enabled"]]}'
+		for param, value in user.current_config[session_name][app_name].items():
+			if param != '__field_types':
+				text += f'\n{param}: {value}'
 
-			keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]]
-			for app_name in user.current_config.keys():
-				keyboard.append([InlineKeyboardButton(app_name, callback_data=f'view_config {app_name}')])
+		keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')],
+					[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.change_config, callback_data=f'edit_config default {session_name} {app_name}')]]
 
-			keyboard = InlineKeyboardMarkup(keyboard)
-
-			await update.callback_query.edit_message_text(text="Select an application:", reply_markup=keyboard)
+		if user.current_config[session_name][app_name]["enabled"]:
+			_button_name = user.locale_module.BUTTON_NAMINGS.disable_app
 		else:
-			app_name = data[1]
+			_button_name = user.locale_module.BUTTON_NAMINGS.enable_app
 
-			text = f'<b>Enabled</b>: {["No🔺", "Yes🟢"][user.current_config[app_name]["enabled"]]}'
-			for param, value in user.current_config[app_name].items():
-				if param != '__field_types':
-					text += f'\n{param}: {value}'
+		keyboard[-1].append(InlineKeyboardButton(_button_name, callback_data=f'edit_config toggle {session_name} {app_name}'))
+		keyboard = InlineKeyboardMarkup(keyboard)
 
-			keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')],
-						[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.change_config, callback_data=f'edit_config default {app_name}')]]
-
-			if user.current_config[app_name]["enabled"]:
-				_button_name = user.locale_module.BUTTON_NAMINGS.disable_app
-			else:
-				_button_name = user.locale_module.BUTTON_NAMINGS.enable_app
-
-			keyboard.append([InlineKeyboardButton(_button_name, callback_data=f'edit_config toggle {app_name}')])
-			keyboard = InlineKeyboardMarkup(keyboard)
-
-			await update.callback_query.edit_message_text(text=text, reply_markup=keyboard, parse_mode='HTML')
+		await context.bot.send_message(user.chat_id, text=text, reply_markup=keyboard, parse_mode='HTML')
 
 
 	async def edit_config(self, update, context) -> None:
@@ -483,29 +471,29 @@ class Bot:
 			await context.bot.answer_callback_query(update.callback_query.id)
 
 			if data[0] == 'toggle':
-				user.current_config[data[1]]['enabled'] = not user.current_config[data[1]]['enabled']
+				user.current_config[data[1]][data[2]]['enabled'] = not user.current_config[data[1]][data[2]]['enabled']
 				_apply_config()
 				await update.callback_query.edit_message_text(text='Success!', reply_markup=utils.main_menu_keyboard())
 			elif data[0] == 'default':
 				keyboard = [[InlineKeyboardButton(user.locale_module.BUTTON_NAMINGS.return_to_main_menu, callback_data='main_menu')]]
-				for param, value in user.current_config[data[1]].items():
+				for param, value in user.current_config[data[1]][data[2]].items():
 					if param not in {'enabled', '__field_types'}:
-						keyboard.append([InlineKeyboardButton(param, callback_data=f'edit_config change_param {data[1]} {param}')])
+						keyboard.append([InlineKeyboardButton(param, callback_data=f'edit_config change_param {data[1]} {data[2]} {param}')])
 
 				keyboard = InlineKeyboardMarkup(keyboard)
 				await update.callback_query.edit_message_text(text=update.callback_query.message.text, reply_markup=keyboard)
 			elif data[0] == 'change_param':
 				await context.bot.send_message(user.chat_id, text=user.locale_module.MISC_MESSAGES['change_param'])
-				user.current_state = f'edit_config {data[1]} {data[2]}'
+				user.current_state = f'edit_config {data[1]} {data[2]} {data[3]}'
 
 			return
 
-		app_name, param = user.current_state.split(' ')[1::]
+		session_name, app_name, param = user.current_state.split(' ')[1::]
 		new_value = update.message.text
 		user.current_state = None
 
 		validate = False
-		if user.current_config[app_name]['__field_types'][param] == 'int':
+		if user.current_config[session_name][app_name]['__field_types'][param] == 'int':
 			if new_value.isnumeric():
 				new_value = int(new_value)
 				validate = True
@@ -516,7 +504,7 @@ class Bot:
 										   reply_markup=utils.main_menu_keyboard())
 			return
 
-		user.current_config[app_name][param] = new_value
+		user.current_config[session_name][app_name][param] = new_value
 		_apply_config()
 
 		await context.bot.send_message(user.chat_id,
@@ -529,7 +517,7 @@ class Bot:
 		query = update.inline_query.query
 
 		user = self.connected_users[update.inline_query.from_user.id]
-		if user.current_state is None or not user.current_state.startswith('manage_session'):
+		if user.current_state is None or not user.current_state.startswith('view_config'):
 			result = [
 				InlineQueryResultArticle(id=str(uuid.uuid4()),
 										 title='main menu',
@@ -549,7 +537,10 @@ class Bot:
 			# 							 caption=user.app_service.applications[session_name][name].inline_report_info,
 			# 							 input_message_content=InputTextMessageContent('simpletap'),
 			# 							 ))
-			_text = f"{name}\n{user.app_service.applications[session_name][name].inline_report_info}"
+			if name in user.app_service.applications[session_name]:
+				_text = f"{name}\n{user.app_service.applications[session_name][name].inline_report_info}"
+			else:
+				_text = name
 			result.append(InlineQueryResultArticle(id=uuid.uuid4(),
 												   title=_text,
 												   input_message_content=InputTextMessageContent('simpletap')))
@@ -586,7 +577,6 @@ def main():
 			bot.admin_panel      : "admin_panel",
 			bot.get_user_session : "get_user_session",
 			bot.delete_account   : "delete_account",
-			bot.view_config      : "view_config",
 			bot.edit_config      : "edit_config",
 			bot.user_start       : "user_start",
 			bot.profile          : "profile",

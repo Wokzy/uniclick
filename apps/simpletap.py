@@ -293,6 +293,8 @@ async def get_simpletap_url(client:TelegramClient) -> str:
 
 
 async def simpletap_init(client:TelegramClient, config) -> SimpleTap:
+	# await client.send_message('Simple_Tap_Bot', f'/start')
+
 	url = await get_simpletap_url(client)
 	user = await client.get_me()
 
