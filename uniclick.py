@@ -350,8 +350,9 @@ class Bot:
 			del user.tg_sessions[name]
 
 		for name in user.tg_sessions.keys():
-			keyboard.append([InlineKeyboardButton(name, callback_data=f'get_user_session {name}')])
+			keyboard.append([InlineKeyboardButton(name, switch_inline_query_current_chat=f'{name}')]) # callback_data=f'get_user_session {name}'
 
+		user.current_state = 'view_config'
 		keyboard = InlineKeyboardMarkup(keyboard)
 
 		await update.callback_query.edit_message_text(text=text,
@@ -517,7 +518,7 @@ class Bot:
 		query = update.inline_query.query
 
 		user = self.connected_users[update.inline_query.from_user.id]
-		if user.current_state is None or not user.current_state.startswith('view_config'):
+		if user.current_state is None or not user.current_state.startswith('view_config') or query not in user.app_service.clients:
 			result = [
 				InlineQueryResultArticle(id=str(uuid.uuid4()),
 										 title='main menu',
@@ -526,7 +527,8 @@ class Bot:
 			await update.inline_query.answer(result)
 			return
 
-		session_name = user.current_state.split(' ')[1]
+		session_name = query
+		user.current_state = f'view_config {session_name}'
 
 		result = []
 		for name, chat_id in SUPPORTED_APPLICATIONS.items():
@@ -537,15 +539,18 @@ class Bot:
 			# 							 caption=user.app_service.applications[session_name][name].inline_report_info,
 			# 							 input_message_content=InputTextMessageContent('simpletap'),
 			# 							 ))
+			_text = ""
 			if name in user.app_service.applications[session_name]:
-				_text = f"{name}\n{user.app_service.applications[session_name][name].inline_report_info}"
-			else:
-				_text = name
+				_text = f"{user.app_service.applications[session_name][name].inline_report_info}"
 			result.append(InlineQueryResultArticle(id=uuid.uuid4(),
-												   title=_text,
+												   thumbnail_url=CONFIG['app_images_urls'][name],
+												   thumbnail_width=64,
+												   thumbnail_height=64,
+												   description=_text,
+												   title=name,
 												   input_message_content=InputTextMessageContent('simpletap')))
 
-		await update.inline_query.answer(result)
+		await update.inline_query.answer(result, cache_time=0)
 
 
 
