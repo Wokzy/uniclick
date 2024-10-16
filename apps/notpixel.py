@@ -2,6 +2,7 @@
 import time
 import utils
 import urllib
+import random
 import requests
 import datetime
 
@@ -71,7 +72,7 @@ class NotPixel:
 
 
 	def get_mining_status(self) -> dict:
-		return self.make_get_request(method='mining/status')
+		return self.make_request(path='mining/status')
 
 
 	def get_user_balance(self) -> float:
@@ -94,7 +95,7 @@ class NotPixel:
 			if level == 2:
 				continue
 
-			result = self.make_get_request(method=f'mining/boost/check/{name}')
+			result = self.make_request(path=f'mining/boost/check/{name}')
 			if result[name]:
 				self.logger.log_app(self.user_id, f"successfully upgraded {name} to level {level + 1}")
 				balance -= price
@@ -106,7 +107,23 @@ class NotPixel:
 		mining_status = self.get_mining_status()
 
 		if mining_status['fromStart'] > mining_status['maxMiningTime'] // 100:
-			result = self.make_get_request(method='mining/claim')
+			result = self.make_request(path='mining/claim')
+			# print(result)
+
+
+	def _paint_random_pixels(self) -> None:
+		""" Attempts to paint random pixel """
+		colors = ["#FFFFFF" , "#000000" , "#00CC78" , "#BE0039",]
+		mining_status = self.get_mining_status()
+
+		for i in range(mining_status['charges']):
+			pixel = (random.randint(100,990) * 1000) + random.randint(100,990)
+			request_payload = {
+				"pixelId":pixel,
+				"newColor":random.choice(colors),
+			}
+
+			result = self.make_request(path='repaint/start', method='post', payload=request_payload)
 			print(result)
 
 
@@ -115,6 +132,7 @@ class NotPixel:
 
 		self._purchace_boosts()
 		self._claim_farm()
+		self._paint_random_pixels()
 
 
 	def __get_headers(self) -> dict:
@@ -140,15 +158,17 @@ class NotPixel:
 		return (datetime.datetime.now() - self.url_update_timer) <= BASE_URL_UPDATE_TIME
 
 
-	def make_get_request(self, method:str, json_trigger:str = "{") -> dict:
+	def make_request(self, path:str, method:str = 'get', json_trigger:str = "{", payload=None) -> dict:
 		""" Make get request to NotPixel API """
 
 		assert self.__check_auth_expiration(), "Auth token has expired"
 
+		if payload == None:
+			payload = {}
 		headers = self.__get_headers()
 
-		url = urllib.parse.urljoin(API_URL, method)
-		self.logger.log_app(user_id=self.user_id, string=url)
+		url = urllib.parse.urljoin(API_URL, path)
+		# self.logger.log_app(user_id=self.user_id, string=url)
 
 		# url ="https://notpx.app/api/v1/mining/boost/check/energyLimit"
 
@@ -156,7 +176,10 @@ class NotPixel:
 		# result = self.session.get(url=url, headers=headers)
 		for i in range(HTTP_MAX_RETRY):
 			try:
-				result = self.session.get(url=url, headers=headers, timeout=5.0)
+				if method == 'get':
+					result = self.session.get(url=url, headers=headers, timeout=5.0)
+				else:
+					result = self.session.post(url=url, headers=headers, json=payload, timeout=5.0)
 				break
 			except:
 				time.sleep(3)
