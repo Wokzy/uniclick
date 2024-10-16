@@ -32,7 +32,7 @@ class SimpleTap:
 
 		self.base_url = base_url
 		self.user_id = user_id
-		self.auth_data = self.extract_auth_data()
+		self.auth_data = utils.extract_auth_data(self.base_url)
 		self.session = requests.Session()
 		self.url_update_timer = datetime.datetime.now()
 
@@ -67,15 +67,9 @@ class SimpleTap:
 			}
 
 
-	def extract_auth_data(self) -> str:
-		""" Get auth data from url """
-		# print(self.base_url)
-		return urllib.parse.unquote(self.base_url).split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]
-
-
 	def update_base_url(self, new_url:str):
 		self.base_url = new_url
-		self.auth_data = self.extract_auth_data()
+		self.auth_data = utils.extract_auth_data(self.base_url)
 
 		self.session.close()
 		self.session = requests.Session()
@@ -216,7 +210,7 @@ class SimpleTap:
 		for i in range(HTTP_MAX_RETRY):
 			try:
 				result = self.session.post(url, headers=headers, json=data)
-			except Exception as e:
+			except Exception:
 				time.sleep(3)
 				# print(e, 'retrying....')
 				# if result.status_code == 104:

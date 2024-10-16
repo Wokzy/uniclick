@@ -518,13 +518,14 @@ class Bot:
 		query = update.inline_query.query
 
 		user = self.connected_users[update.inline_query.from_user.id]
+		print(query, query in user.app_service.clients)
 		if user.current_state is None or not user.current_state.startswith('view_config') or query not in user.app_service.clients:
 			result = [
 				InlineQueryResultArticle(id=str(uuid.uuid4()),
 										 title='main menu',
 										 input_message_content=InputTextMessageContent('/main_menu'))
 			]
-			await update.inline_query.answer(result)
+			await update.inline_query.answer(result, cache_time=0)
 			return
 
 		session_name = query

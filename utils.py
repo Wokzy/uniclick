@@ -2,6 +2,7 @@
 import os
 import json
 import copy
+import urllib
 
 from telegram import (
 	InlineKeyboardButton,
@@ -65,7 +66,7 @@ def load_users(instance) -> dict:
 
 
 
-async def get_base_app_url(client:TelegramClient, bot_name:str, app_url:str, platform:str = 'ios', start_param:str = '') -> str:
+async def get_base_app_url(client:TelegramClient, bot_name:str, app_url:str = None, platform:str = 'ios', start_param:str = '') -> str:
 	""" Get application url with auth data """
 
 	return (await client(
@@ -78,6 +79,10 @@ async def get_base_app_url(client:TelegramClient, bot_name:str, app_url:str, pla
 			start_param=start_param
 		)
 	)).url
+
+def extract_auth_data(base_app_url):
+	""" Get auth data from base app url """
+	return urllib.parse.unquote(base_app_url).split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]
 
 
 def save_app_photos(photos: dict[str, str], path: str) -> None:

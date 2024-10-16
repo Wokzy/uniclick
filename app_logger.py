@@ -22,4 +22,4 @@ class AppLogger(Logger):
 
 
 	def log_app(self, user_id: int, string: str, on_debug=True) -> None:
-		self.log_string(string = f'({user_id}) {string}', on_debug=on_debug)
+		self.log_string(string = f'({self.app_name}) ({user_id}) {string}', on_debug=on_debug)
