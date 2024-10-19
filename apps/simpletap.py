@@ -132,7 +132,7 @@ class SimpleTap:
 			global blocks
 			blocks = self.get_mining_blocks()
 
-			if blocks[name]['dependencyMineId'] is not None:
+			if blocks[name]['dependencyMineId']:
 				while blocks[name]['dependencyMineLevel'] > blocks[blocks[name]['dependencyMineId']]['currentLevel']:
 					if not __buy_mining(blocks[blocks[name]['dependencyMineId']]['mineId'], force=name):
 						return False
@@ -143,7 +143,8 @@ class SimpleTap:
 			try:
 				self.make_post_request('buy-mining-block', payload={"mineId":blocks[name]['mineId'], "level":blocks[name]['currentLevel'] + 1})
 			except AssertionError as e:
-				self.logger.log_app(self.user_id, e)
+				# self.logger.log_app(self.user_id, e)
+				return False
 
 			string = f'Upgraded {blocks[name]["mineId"]} to level {blocks[name]["currentLevel"] + 1}'
 			if force:
@@ -261,7 +262,8 @@ async def complete_essential_tasks(client:TelegramClient, class_instance:SimpleT
 				class_instance.make_post_request('start-task-start-2', payload={'type':task['type'], 'id':task['id']})
 
 			for channel in ESSENTIAL_TASKS_TG_CHANNELS:
-				if channel in task['url']:
+				if task['url'] is not None and channel in task['url']:
+					# print(task['url'])
 					await client(JoinChannelRequest(channel = channel))
 					response = class_instance.make_post_request('check-task-check-2', payload={'type':task['type'], 'id':task['id']})
 					# await client(LeaveChannelRequest(channel = channel))
@@ -298,22 +300,17 @@ async def simpletap_init(client:TelegramClient, config) -> SimpleTap:
 async def simpletap_update(app:SimpleTap, client:TelegramClient) -> None:
 
 	try:
-		try:
-			if len(get_essnsial_tasks(app)) > 0:
-				if app.status is None:
-					app.status = 'completing essential tasks'
+		if len(get_essnsial_tasks(app)) > 0:
+			if app.status is None:
+				app.status = 'completing essential tasks'
 
-				await complete_essential_tasks(client, app)
-		except:
-			pass
+			await complete_essential_tasks(client, app)
 
 		if (datetime.datetime.now() - app.url_update_timer) > UPDATE_URL_TIMEOUT:
-			if '--debug' in sys.argv:
-				app.logger.log_app(app.user_id, f"updating url")
+			app.logger.log_app(app.user_id, f"updating url")
 			app.url_update_timer = datetime.datetime.now()
 			app.update_base_url(new_url = await get_simpletap_url(client))
 
-		# print('update all')
 		app.update_all()
 		app.status = None
 		app.warning = None

@@ -518,7 +518,7 @@ class Bot:
 		query = update.inline_query.query
 
 		user = self.connected_users[update.inline_query.from_user.id]
-		print(query, query in user.app_service.clients)
+		# print(query, query in user.app_service.clients)
 		if user.current_state is None or not user.current_state.startswith('view_config') or query not in user.app_service.clients:
 			result = [
 				InlineQueryResultArticle(id=str(uuid.uuid4()),

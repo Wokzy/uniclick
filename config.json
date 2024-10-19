@@ -6,13 +6,18 @@
 	"admins":[],
 	"required_channels":[],
 	"app_images_urls":{
-		"simpletap":"https://kgo.googleusercontent.com/profile_vrt_raw_bytes_1587515358_10512.png"
+		"simpletap":"https://kgo.googleusercontent.com/profile_vrt_raw_bytes_1587515358_10512.png",
+		"notpixel":"https://kgo.googleusercontent.com/profile_vrt_raw_bytes_1587515358_10512.png"
 	},
 	"default_user_config": {
 		"simpletap": {
 			"__field_types":{"enabled":"bool", "max_cards_level":"int"},
 			"enabled":true,
 			"max_cards_level":10
+		},
+		"notpixel":{
+			"__field_types":{"enabled":"bool"},
+			"enabled":true
 		}
 	}
 }

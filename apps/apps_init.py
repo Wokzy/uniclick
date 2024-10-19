@@ -9,7 +9,10 @@ import telethon
 import threading
 
 import utils
-from apps import simpletap
+from apps import (
+	simpletap,
+	notpixel,
+)
 from app_logger import Logger
 from tg_api import init_client
 
@@ -30,8 +33,10 @@ class AppsService(threading.Thread):
 		self.update_queue = queue.Queue()
 		self.logger = Logger()
 		self.applications = {}
-		self.application_initializers = {'simpletap':simpletap.simpletap_init}
-		self.applications_updaters = {'simpletap':simpletap.simpletap_update}
+		self.application_initializers = {'simpletap':simpletap.simpletap_init,
+										 'notpixel':notpixel.notpixel_init}
+		self.applications_updaters = {'simpletap':simpletap.simpletap_update,
+									  'notpixel':notpixel.notpixel_update}
 
 		self.running = True
 
@@ -120,6 +125,7 @@ class AppsService(threading.Thread):
 					self.applications[cl_name][name] = await method(client['client'], self.config[cl_name][name])
 
 		for cl_name in _rm_list:
+			print(cl_name)
 			del self.clients[cl_name]
 
 
@@ -139,4 +145,5 @@ class AppsService(threading.Thread):
 					_rm_list.append(name)
 
 			for name in _rm_list:
+				print(name)
 				del self.applications[cl_name][name]
